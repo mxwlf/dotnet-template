@@ -1,0 +1,55 @@
+# ---------------------------------------------------------------------------
+# Azure DevOps Pipeline — THIN WRAPPER
+# ---------------------------------------------------------------------------
+# This pipeline deliberately contains no build logic. It only:
+#   1. checks out the code,
+#   2. provides a Python interpreter,
+#   3. runs `make ci`.
+#
+# `make ci` builds the repo-local virtualenv (.venv/) from that interpreter and
+# installs the pinned `pre-commit` from requirements-dev.txt into it, exactly as
+# a developer's `make setup` does — so there is nothing to install globally here.
+#
+# All actual checks live in the Makefile (`make ci`) and run identically on a
+# developer laptop and in GitHub Actions (.github/workflows/ci.yml). To change
+# WHAT runs in CI, edit the Makefile and .pre-commit-config.yaml — not this
+# file. The only things that belong here are platform-specific concerns that
+# cannot live in a portable script: triggers, the agent image, and
+# prerequisite installation.
+#
+# Determinism: tool versions are pinned (Python below; `pre-commit` in
+# requirements-dev.txt; hook versions via `rev` in .pre-commit-config.yaml).
+# Bump them deliberately.
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pr:
+  branches:
+    include:
+      - develop
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  # Interpreter used to build .venv. Any version >= 3.10 works (see MIN_PYTHON
+  # in the Makefile); it is pinned here only for reproducible runs, not because
+  # the hooks need this exact version.
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.14"
+
+  # Cache pre-commit hook environments keyed on the config so unchanged hooks
+  # are not rebuilt on every run.
+  - task: Cache@2
+    inputs:
+      key: 'pre-commit | "$(Agent.OS)" | .pre-commit-config.yaml'
+      path: $(HOME)/.cache/pre-commit
+
+  # The single entrypoint. Everything CI does is defined in the Makefile.
+  - script: make ci
+    displayName: make ci
