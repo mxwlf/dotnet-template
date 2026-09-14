@@ -33,6 +33,13 @@
 
 .DEFAULT_GOAL := help
 
+SOLUTION := dotnet-template.slnx
+CONFIGURATION ?= Release
+ARTIFACTS_DIR ?= artifacts
+BASELINE_REF ?=
+BASELINE_PACKAGE ?=
+VERSION ?=
+
 # ---------------------------------------------------------------------------
 # REPO-LOCAL VIRTUALENV
 # ---------------------------------------------------------------------------
@@ -57,7 +64,7 @@ PRE_COMMIT := $(VENV_BIN)/pre-commit
 # .venv; makes `venv` a no-op until the requirements change.
 VENV_STAMP := $(VENV)/.requirements-installed
 
-.PHONY: setup venv ci lint clean check-python help
+.PHONY: setup venv ci lint clean check-python help tools build
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -75,6 +82,12 @@ $(VENV_STAMP): requirements-dev.txt
 	$(VENV_BIN)/python -m pip install --disable-pip-version-check --require-virtualenv -r requirements-dev.txt
 	@touch $@
 
+tools: check-dotnet ## Restore pinned local .NET tools
+	dotnet tool restore
+
+check-dotnet:
+	@command -v dotnet >/dev/null || { echo 'The .NET SDK pinned in global.json is required.' 1>&2; exit 1; }
+
 # ---------------------------------------------------------------------------
 # CI ENTRYPOINT
 # ---------------------------------------------------------------------------
@@ -86,9 +99,11 @@ $(VENV_STAMP): requirements-dev.txt
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint ## Run the full CI check suite (what pipelines invoke)
+ci: lint build ## Run the full CI check suite (what pipelines invoke)
 
-lint: venv ## Run all pre-commit hooks against all files (same hooks as the git hooks)
+lint: pre-commit ## Run all pre-commit hooks against all files (same hooks as the git hooks)
+
+pre-commit: venv ## Run all pre-commit hooks against all files (same hooks as the git hooks)
 	$(PRE_COMMIT) run --all-files --show-diff-on-failure
 
 clean: ## Remove the local virtualenv (rebuild it with `make setup`)
@@ -107,3 +122,6 @@ check-python: ## Verify the interpreter used to build .venv is new enough
 		echo '           make setup PYTHON=python3.12' 1>&2; \
 		exit 1; \
 	}
+
+build: check-dotnet ## Build every project with analyzers enforced
+	dotnet build --configuration $(CONFIGURATION)
