@@ -64,7 +64,7 @@ PRE_COMMIT := $(VENV_BIN)/pre-commit
 # .venv; makes `venv` a no-op until the requirements change.
 VENV_STAMP := $(VENV)/.requirements-installed
 
-.PHONY: setup venv ci lint clean check-python help tools build
+.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -85,8 +85,33 @@ $(VENV_STAMP): requirements-dev.txt
 tools: check-dotnet ## Restore pinned local .NET tools
 	dotnet tool restore
 
-check-dotnet:
-	@command -v dotnet >/dev/null || { echo 'The .NET SDK pinned in global.json is required.' 1>&2; exit 1; }
+# Checks that a `dotnet` exists AND that it can satisfy the SDK version pinned in global.json.
+# Merely finding `dotnet` on PATH is not enough: the host is installed independently of the SDKs, so
+# a machine can have the command and still have no SDK the pin accepts, and the failure then surfaces
+# much later as an opaque MSBuild error.
+#
+# `dotnet --version` is the probe because it resolves through global.json and exits non-zero (155)
+# when the pin cannot be met, printing the requested version, the offending global.json and the list
+# of SDKs that are installed. `dotnet --list-sdks` is NOT usable here: it ignores global.json
+# entirely and exits 0 even when the pinned SDK is absent.
+#
+# The pin is deliberately not auto-installed. CI installs it in .github/workflows/ci.yml with
+# actions/setup-dotnet, which is the same "prerequisite installation" role actions/setup-python
+# plays for $(PYTHON); on a laptop, which SDKs to install is the developer's call, so this target
+# only tells them precisely what is missing.
+check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in global.json
+	@command -v dotnet > /dev/null 2>&1 || { \
+		echo 'Error: `dotnet` was not found on your PATH.' 1>&2; \
+		echo '       Install the .NET SDK pinned in global.json: https://dot.net/download' 1>&2; \
+		exit 1; \
+	}
+	@dotnet --version > /dev/null 2>&1 || { \
+		echo 'Error: no installed .NET SDK satisfies the version pinned in global.json.' 1>&2; \
+		echo '       Install that SDK from https://dot.net/download, or repin global.json to one' 1>&2; \
+		echo '       you already have. dotnet reports:' 1>&2; \
+		dotnet --version 2>&1 | sed 's/^/       | /' 1>&2; \
+		exit 1; \
+	}
 
 # ---------------------------------------------------------------------------
 # CI ENTRYPOINT
@@ -99,12 +124,18 @@ check-dotnet:
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint build ## Run the full CI check suite (what pipelines invoke)
+ci: lint build test ## Run the full CI check suite (what pipelines invoke)
 
-lint: pre-commit ## Run all pre-commit hooks against all files (same hooks as the git hooks)
+# The dotnet-build-test hook builds and tests the staged tree on `git commit`. `ci` reaches the same
+# code through its own `build` and `test` targets, so the hook is skipped here: leaving it in would
+# compile and run the whole suite twice per pipeline run. It is only skipped for `--all-files` runs
+# driven by make; `git commit` still runs it.
+LINT_SKIP_HOOKS := dotnet-build-test
 
-pre-commit: venv ## Run all pre-commit hooks against all files (same hooks as the git hooks)
-	$(PRE_COMMIT) run --all-files --show-diff-on-failure
+lint: pre-commit ## Run the pre-commit hooks against all files (the build/test hook is left to `build` and `test`)
+
+pre-commit: venv ## Run the pre-commit hooks against all files (the build/test hook is left to `build` and `test`)
+	SKIP=$(LINT_SKIP_HOOKS) $(PRE_COMMIT) run --all-files --show-diff-on-failure
 
 clean: ## Remove the local virtualenv (rebuild it with `make setup`)
 	rm -rf $(VENV)
@@ -125,3 +156,65 @@ check-python: ## Verify the interpreter used to build .venv is new enough
 
 build: check-dotnet ## Build every project with analyzers enforced
 	dotnet build --configuration $(CONFIGURATION)
+
+# Tests run on Microsoft.Testing.Platform (opted into by the "test" section of global.json), which
+# makes every test project a self-contained executable that hosts its own test framework.
+#
+# Those executables are invoked DIRECTLY here rather than through `dotnet test`, which is the one
+# place this Makefile passes up a first-party dotnet CLI command. `dotnet test` drives each module
+# in MTP's server mode, where the orchestrator captures the module's stdout and re-renders it
+# through its own terminal UI. That silently swallows the GitHub Actions workflow commands the
+# reporter writes there — annotations, log groups and slow-test notices all disappear — and only the
+# markdown job summary survives, because that one is written straight to a file. Running each module
+# ourselves keeps the whole feature set, at the cost of doing the module discovery below.
+# `dotnet test` is not broken by any of this and remains available for IDEs and ad-hoc runs.
+#
+# --results-directory keeps the TRX report and the Cobertura coverage file inside the same
+# $(ARTIFACTS_DIR) tree that UseArtifactsOutput already writes bin/ and obj/ into, so
+# everything a build produces — including test results — lives under one gitignored
+# directory that CI can publish wholesale.
+#
+# --report-gh makes the run a first-class GitHub Actions experience: per-assembly log groups,
+# annotations on failed and skipped tests (which also land on a pull request's "Files changed"
+# diff, because the reporter emits repository-relative paths), a markdown job summary appended to
+# the file named by $GITHUB_STEP_SUMMARY, and notices for slow tests. The extension that owns the
+# switch (Microsoft.Testing.Extensions.GitHubActionsReport, referenced by the test project) checks
+# the GITHUB_ACTIONS environment variable itself and does nothing unless it is "true", so the flag
+# is passed unconditionally: `make test` stays a single command that is correct on a laptop and in
+# CI alike, which is the same reason .github/workflows/ci.yml carries no logic of its own.
+TEST_RESULTS_DIR ?= $(ARTIFACTS_DIR)/test-results
+
+# Test modules live at $(ARTIFACTS_DIR)/bin/<project>/<configuration>/<project>. The artifacts output
+# layout lowercases <configuration> and appends the build pivots to it, so a multi-targeted project
+# produces release_net10.0 rather than plain release — hence the trailing wildcard when globbing for
+# it. The apphost itself has no extension on Unix and .exe on Windows.
+TEST_CONFIG_DIR := $(shell printf '%s' '$(CONFIGURATION)' | tr '[:upper:]' '[:lower:]')
+TEST_EXE_EXT := $(if $(filter Windows_NT,$(OS)),.exe,)
+
+# The modules run one at a time on purpose: GitHub's ::group:: and ::endgroup:: commands are
+# sequential and anonymous, so modules running concurrently would interleave and file their output
+# under the wrong heading. Every module is run even after one fails, so a red build reports all of
+# its failures at once; the loop then exits non-zero. Finding no modules at all is itself a failure,
+# because a test target that silently runs nothing is indistinguishable from a passing one.
+test: build ## Run every test project, writing results and coverage into $(TEST_RESULTS_DIR)
+	@status=0; found=0; \
+	for dir in $(ARTIFACTS_DIR)/bin/*.tests.*; do \
+		name=$$(basename "$$dir"); \
+		for cfg in "$$dir"/$(TEST_CONFIG_DIR)*; do \
+			exe="$$cfg/$$name$(TEST_EXE_EXT)"; \
+			[ -x "$$exe" ] || continue; \
+			found=$$((found + 1)); \
+			echo "==> $$exe"; \
+			"$$exe" \
+				--results-directory $(TEST_RESULTS_DIR) \
+				--report-xunit-trx --report-xunit-trx-filename "$$name.trx" \
+				--report-gh \
+				--coverlet --coverlet-output-format cobertura || status=1; \
+		done; \
+	done; \
+	if [ "$$found" -eq 0 ]; then \
+		echo 'make: found no test executables under $(ARTIFACTS_DIR)/bin/*.tests.*/$(TEST_CONFIG_DIR)*/.' 1>&2; \
+		echo '      Check that `make build` succeeded and that CONFIGURATION=$(CONFIGURATION) is the one that was built.' 1>&2; \
+		exit 1; \
+	fi; \
+	exit $$status

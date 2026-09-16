@@ -98,6 +98,14 @@ not into `.venv/`.
   chore: bump dependencies
   ```
 - **sync-pre-commit-deps**: keeps hook dependency versions in sync.
+- **dotnet-build-test** (local): runs `make test`, which builds and then tests in
+  `Release`. That is the configuration where analyzer findings are errors — Debug
+  builds only warn, so you can iterate without cleaning up every diagnostic
+  first, and this hook is what stops an unresolved one from being committed. It
+  only runs when a build input (`.cs`, `.csproj`, `.slnx`, `.props`, `.targets`,
+  `.json`) is staged, so documentation-only commits do not pay for a build and
+  test run. `make lint` skips it, because `make ci` builds and tests through its
+  own targets.
 
 ## CI/CD integration
 
@@ -194,6 +202,9 @@ Bump these versions deliberately when you want to upgrade.
 | `make venv` | Create/update `.venv` from `requirements-dev.txt` (no-op when up to date). |
 | `make ci` | Run the full CI check suite — the single command CI/CD pipelines invoke. Runs identically locally. |
 | `make lint` | Run all pre-commit hooks against all files. |
+| `make build` | Build every project with analyzers enforced. |
+| `make test` | Run every test project, writing the TRX report and Cobertura coverage into `artifacts/test-results/`. |
+| `make tools` | Restore the pinned local .NET tools from `.config/dotnet-tools.json`. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
 

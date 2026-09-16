@@ -40,6 +40,29 @@ jobs:
         with:
           python-version: "3.14"
 
+      # The .NET SDK. Unlike the Python version above, this is not a free choice:
+      # global-json-file points the action at the same global.json that the build
+      # itself resolves through, so CI compiles with exactly the pinned SDK and
+      # `make check-dotnet` cannot fail here. The action would also discover a
+      # root global.json on its own, but naming it keeps the coupling explicit.
+      #
+      # This step exists for the same reason setup-python does: installing a
+      # prerequisite toolchain is a runner concern that cannot live in a portable
+      # script. The Makefile only *verifies* the SDK (`make check-dotnet`); it
+      # deliberately never installs one.
+      #
+      # cache/cache-dependency-path cache the NuGet global-packages folder, the
+      # direct analogue of the pre-commit cache below. The key is a hash of every
+      # packages.lock.json, which RestorePackagesWithLockFile (Directory.Build.props)
+      # guarantees exists and keeps committed, so the key only moves when a
+      # dependency actually changes. The glob is quoted because a leading `*` would
+      # otherwise be read as a YAML alias.
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+
       # Cache pre-commit hook environments keyed on the config so unchanged
       # hooks are not rebuilt on every run.
       - uses: actions/cache@v6

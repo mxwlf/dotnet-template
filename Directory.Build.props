@@ -9,7 +9,18 @@
     <AnalysisMode>All</AnalysisMode>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Diagnostics are always produced, but they only fail the build in Release. Development
+         builds report them as warnings so a work-in-progress change can be compiled and run
+         without stopping to clean up every finding first. `make build` and `make test` use
+         $(CONFIGURATION), which defaults to Release, so `make ci` — the single command the
+         pipelines invoke — still holds the code to the strict bar. The git pre-commit hooks do not
+         compile anything, so `make ci` (locally or in CI) is where this is first enforced.
+
+         The comparison is against Release rather than != Debug on purpose: this file is imported
+         before the SDK defaults Configuration, so $(Configuration) is empty here for a plain
+         `dotnet build`, and != Debug would match that and make the default dev build the strict
+         one. -->
+    <TreatWarningsAsErrors Condition="'$(Configuration)' == 'Release'">true</TreatWarningsAsErrors>
 
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
@@ -22,20 +33,20 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
-    <IsPackable>true</IsPackable>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageIcon>package-icon.png</PackageIcon>
-    <PackageTags>dotnet;library;template</PackageTags>
-    <Authors>mxwlf</Authors>
-    <Company>mxwlf</Company>
-    <Copyright>Copyright (c) mxwlf</Copyright>
-    <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>
+<!--    <IsPackable>true</IsPackable>-->
+<!--    <PackageLicenseExpression>MIT</PackageLicenseExpression>-->
+<!--    <PackageReadmeFile>README.md</PackageReadmeFile>-->
+<!--    <PackageIcon>package-icon.png</PackageIcon>-->
+<!--    <PackageTags>dotnet;library;template</PackageTags>-->
+<!--    <Authors>mxwlf</Authors>-->
+<!--    <Company>mxwlf</Company>-->
+<!--    <Copyright>Copyright (c) mxwlf</Copyright>-->
+<!--    <RepositoryType>git</RepositoryType>-->
+<!--    <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>-->
+<!--    <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>-->
   </PropertyGroup>
 
-  <!-- Enable artifacts output layour (https://learn.microsoft.com/en-us/dotnet/core/sdk/artifacts-output) -->
+  <!-- Enable artifacts output layout (https://learn.microsoft.com/en-us/dotnet/core/sdk/artifacts-output) -->
   <PropertyGroup>
      <UseArtifactsOutput>true</UseArtifactsOutput>
      <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
