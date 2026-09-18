@@ -172,12 +172,38 @@ portable script:
   Adjust the `on`/`trigger`/`pr` sections in
   [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
   [`azure-pipelines.yml`](azure-pipelines.yml) to change this.
+- **Publishing reports** — `make ci` *produces* the test and coverage reports
+  identically everywhere, but surfacing them is platform-specific: GitHub
+  Actions uploads them as a run artifact, Azure DevOps publishes them to its
+  Tests and Code Coverage tabs. See [Where the reports
+  appear](#where-the-reports-appear).
 - **Secrets, service connections, OIDC, and permissions** — managed in each
   platform's settings/YAML, never in the repo.
 - **Runner/agent image** and **which Python interpreter is on the agent** (the
   base for `.venv`).
 
 Everything else — the actual checks — is shared via `make ci`.
+
+### Where the reports appear
+
+`make test` writes a TRX report and a Cobertura coverage file per test module into
+`artifacts/test-results/`; `make coverage` merges the coverage files into one
+report in `artifacts/coverage/` and fails the build below `COVERAGE_MIN_LINE`
+(80% by default — override it, or set it empty to turn the gate off). Both
+directories are gitignored, so the pipelines are what make them visible:
+
+| Report | Where to look |
+| --- | --- |
+| Test results, coverage, slow tests, and each failure's recent history | **GitHub Actions → run → Summary**, as a job summary |
+| Failed and skipped tests | Annotations on that Summary page, in the job log, and inline on a pull request's **Files changed** and **Checks** tabs |
+| Per-assembly console output | The `make ci` step's log, one collapsible group per test module |
+| The report files themselves (TRX, merged Cobertura, browsable HTML) | The **`ci-reports`** artifact on the run Summary page — uploaded even when the run is red, kept 30 days |
+| Failure history snapshot | **GitHub Actions → Caches** (`gh-test-history-…`); its contents only surface inside the job summary |
+| Test results and coverage on Azure DevOps | The run's native **Tests** and **Code Coverage** tabs |
+
+Locally, `make coverage` prints the same coverage figures to the terminal and
+leaves `artifacts/coverage/index.html` to open in a browser. The GitHub-specific
+output is inert off a runner, so one command behaves correctly in both places.
 
 ### Determinism
 
@@ -203,7 +229,8 @@ Bump these versions deliberately when you want to upgrade.
 | `make ci` | Run the full CI check suite — the single command CI/CD pipelines invoke. Runs identically locally. |
 | `make lint` | Run all pre-commit hooks against all files. |
 | `make build` | Build every project with analyzers enforced. |
-| `make test` | Run every test project, writing the TRX report and Cobertura coverage into `artifacts/test-results/`. |
+| `make test` | Run every test project, writing the TRX report and Cobertura coverage into `artifacts/test-results/`. On GitHub Actions, also emits the test report (log groups, failure annotations, job summary) and updates the history snapshot in `artifacts/test-history/`. |
+| `make coverage` | Merge every module's Cobertura file into one report in `artifacts/coverage/` (Cobertura, markdown, text, HTML) and fail below `COVERAGE_MIN_LINE`. On GitHub Actions, appends the merged figures to the job summary. |
 | `make tools` | Restore the pinned local .NET tools from `.config/dotnet-tools.json`. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |

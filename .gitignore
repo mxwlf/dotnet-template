@@ -235,7 +235,12 @@ ipython_config.py
 ## Ruby / Rails
 *.gem
 *.rbc
-/.config
+# Ruby's blanket ignore of /.config, narrowed: .NET keeps its local tool manifest at
+# .config/dotnet-tools.json, and that file has to be committed for `make tools` (and therefore
+# `make coverage`, and therefore CI) to restore anything. A negation cannot re-include a file whose
+# parent directory is itself excluded, so the directory is globbed rather than ignored outright.
+/.config/*
+!/.config/dotnet-tools.json
 /coverage/
 /InstalledFiles
 /pkg/

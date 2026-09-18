@@ -30,8 +30,8 @@
   <ItemGroup>
     <PackageReference Include="AutoFixture" />
     <PackageReference Include="AwesomeAssertions" />
-    <PackageReference Include="coverlet.MTP" />
     <PackageReference Include="MartinCostello.Logging.XUnit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="Microsoft.Testing.Extensions.GitHubActionsReport" />
     <PackageReference Include="NSubstitute" />
     <PackageReference Include="NSubstitute.Analyzers.CSharp" PrivateAssets="all" />

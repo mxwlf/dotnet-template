@@ -64,7 +64,7 @@ PRE_COMMIT := $(VENV_BIN)/pre-commit
 # .venv; makes `venv` a no-op until the requirements change.
 VENV_STAMP := $(VENV)/.requirements-installed
 
-.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test
+.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -124,7 +124,7 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint build test ## Run the full CI check suite (what pipelines invoke)
+ci: lint build test coverage ## Run the full CI check suite (what pipelines invoke)
 
 # The dotnet-build-test hook builds and tests the staged tree on `git commit`. `ci` reaches the same
 # code through its own `build` and `test` targets, so the hook is skipped here: leaving it in would
@@ -182,7 +182,31 @@ build: check-dotnet ## Build every project with analyzers enforced
 # the GITHUB_ACTIONS environment variable itself and does nothing unless it is "true", so the flag
 # is passed unconditionally: `make test` stays a single command that is correct on a laptop and in
 # CI alike, which is the same reason .github/workflows/ci.yml carries no logic of its own.
+#
+# --report-gh-history points the reporter at a bounded snapshot of past results. Every failure the
+# summary reports then carries what that failure has done lately — "failed 2 and flaked 0 of 3 prior
+# runs within the 30-day history window", plus p95/p99 durations — which is the difference between
+# reading a red build as a real regression and recognising a test that fails every other week.
+# The reporter reads the snapshot before the run and rewrites it after, but it does not move the file
+# between runs: carrying it forward is the workflow's job, and .github/workflows/ci.yml does that
+# with a rolling actions/cache entry. Locally the whole extension is inert, so no snapshot is read or
+# written on a laptop.
+#
+# Samples are keyed partly by run, so history only accumulates where GITHUB_RUN_ID differs from one
+# run to the next. That is free on a real runner and worth knowing if you ever fake one by hand:
+# without it, every run looks like the same run and overwrites the previous samples instead of
+# adding to them.
+#
+# The path is per-module rather than one shared file because each module rewrites the snapshot it was
+# given, so pointing two modules at the same path would have the second overwrite the first's history.
 TEST_RESULTS_DIR ?= $(ARTIFACTS_DIR)/test-results
+TEST_HISTORY_DIR ?= $(ARTIFACTS_DIR)/test-history
+
+# Days of history the snapshot retains (1-90). This is also the reporter's own default; it is stated
+# explicitly because it is a retention decision, not an incidental one. Note that the effective span
+# is whichever is shorter: this window, or how long the cache entry survives — GitHub evicts caches
+# that go 7 days without a read, so a repo that sits idle for a week starts its history over.
+TEST_HISTORY_WINDOW_DAYS ?= 30
 
 # Test modules live at $(ARTIFACTS_DIR)/bin/<project>/<configuration>/<project>. The artifacts output
 # layout lowercases <configuration> and appends the build pivots to it, so a multi-targeted project
@@ -197,7 +221,8 @@ TEST_EXE_EXT := $(if $(filter Windows_NT,$(OS)),.exe,)
 # its failures at once; the loop then exits non-zero. Finding no modules at all is itself a failure,
 # because a test target that silently runs nothing is indistinguishable from a passing one.
 test: build ## Run every test project, writing results and coverage into $(TEST_RESULTS_DIR)
-	@status=0; found=0; \
+	@mkdir -p $(TEST_HISTORY_DIR); \
+	status=0; found=0; \
 	for dir in $(ARTIFACTS_DIR)/bin/*.tests.*; do \
 		name=$$(basename "$$dir"); \
 		for cfg in "$$dir"/$(TEST_CONFIG_DIR)*; do \
@@ -209,12 +234,71 @@ test: build ## Run every test project, writing results and coverage into $(TEST_
 				--results-directory $(TEST_RESULTS_DIR) \
 				--report-xunit-trx --report-xunit-trx-filename "$$name.trx" \
 				--report-gh \
-				--coverlet --coverlet-output-format cobertura || status=1; \
+				--report-gh-history $(TEST_HISTORY_DIR)/$$name.json \
+				--report-gh-history-window $(TEST_HISTORY_WINDOW_DAYS) \
+				--coverage --coverage-output-format cobertura \
+				--coverage-output "$$name.cobertura.xml" || status=1; \
 		done; \
 	done; \
 	if [ "$$found" -eq 0 ]; then \
 		echo 'make: found no test executables under $(ARTIFACTS_DIR)/bin/*.tests.*/$(TEST_CONFIG_DIR)*/.' 1>&2; \
 		echo '      Check that `make build` succeeded and that CONFIGURATION=$(CONFIGURATION) is the one that was built.' 1>&2; \
 		exit 1; \
+	fi; \
+	exit $$status
+
+# ---------------------------------------------------------------------------
+# COVERAGE
+# ---------------------------------------------------------------------------
+# `make test` leaves one Cobertura file per test module, and the GitHub Actions report summarises each
+# module's coverage separately. Neither produces the number the repository is actually judged by: the
+# aggregate across every module. This target merges them with ReportGenerator into a single report and
+# holds that merged number to a floor.
+#
+# ReportGenerator is a pinned local tool (.config/dotnet-tools.json) rather than a PackageReference
+# because it is a repository-wide report step, not a dependency of any one project — which is also why
+# this target depends on `tools`.
+#
+# -reports is quoted so the shell leaves the glob alone: ReportGenerator does its own globbing, and
+# expanding it here would turn one switch into several arguments. Reaching every module through one
+# glob is what makes the report aggregate rather than per-project.
+#
+# The report types are chosen one per audience: Cobertura is the merged machine-readable file the
+# Azure DevOps Code Coverage tab publishes (azure-pipelines.yml) and any external coverage service
+# would consume; MarkdownSummaryGithub is the job summary block; TextSummary is what a developer sees
+# on a laptop; Html is the browsable report inside the uploaded run artifact.
+#
+# Publishing is guarded on $GITHUB_STEP_SUMMARY rather than on a CI flag, which keeps `make coverage`
+# a single command that is correct in both places — the same property `--report-gh` has in `test`,
+# where the extension checks GITHUB_ACTIONS itself. Off a runner the variable is unset and the text
+# summary goes to stdout instead.
+#
+# The exit status is captured and re-raised at the end so that a tripped threshold still publishes the
+# report that explains it. Failing first would hide exactly the numbers the reader needs.
+COVERAGE_DIR ?= $(ARTIFACTS_DIR)/coverage
+
+# The floors, as percentages. ReportGenerator only accepts 1-100, so emptying a variable is how a gate
+# is turned off (`make coverage COVERAGE_MIN_LINE=`). The line floor ships enabled because a gate
+# nobody opts into never catches a regression; the branch floor ships off because it is the noisier of
+# the two to hold a whole repository to. Both are policy, not mechanism — raise them as the suite
+# grows.
+COVERAGE_MIN_LINE ?= 80
+COVERAGE_MIN_BRANCH ?=
+
+COVERAGE_THRESHOLDS := \
+	$(if $(COVERAGE_MIN_LINE),--minimumCoverageThresholds:lineCoverage=$(COVERAGE_MIN_LINE)) \
+	$(if $(COVERAGE_MIN_BRANCH),--minimumCoverageThresholds:branchCoverage=$(COVERAGE_MIN_BRANCH))
+
+coverage: tools test ## Merge every module's coverage into $(COVERAGE_DIR) and enforce the coverage floor
+	@status=0; \
+	dotnet reportgenerator \
+		"-reports:$(TEST_RESULTS_DIR)/*.cobertura.xml" \
+		"-targetdir:$(COVERAGE_DIR)" \
+		"-reporttypes:Cobertura;MarkdownSummaryGithub;TextSummary;Html" \
+		$(COVERAGE_THRESHOLDS) || status=$$?; \
+	if [ -n "$$GITHUB_STEP_SUMMARY" ] && [ -f "$(COVERAGE_DIR)/SummaryGithub.md" ]; then \
+		cat "$(COVERAGE_DIR)/SummaryGithub.md" >> "$$GITHUB_STEP_SUMMARY"; \
+	elif [ -f "$(COVERAGE_DIR)/Summary.txt" ]; then \
+		cat "$(COVERAGE_DIR)/Summary.txt"; \
 	fi; \
 	exit $$status

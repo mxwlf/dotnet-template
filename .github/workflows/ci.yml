@@ -24,8 +24,20 @@ name: ci
 on:
   push:
     branches: [main, develop]
+  # Both long-lived branches are covered, not just develop: the test reporter annotates failed and
+  # skipped tests on the pull request's own "Files changed" diff, and a pull request that never
+  # triggers a run gets none of that.
   pull_request:
-    branches: [develop]
+    branches: [main, develop]
+
+# Least privilege for the automatically provisioned GITHUB_TOKEN, and the narrowest set that still
+# works: checkout reads the repository, and nothing else here touches the API. The test reporter
+# needs no token at all — annotations, log groups and the job summary are workflow commands written
+# to stdout and to $GITHUB_STEP_SUMMARY, not API calls — and actions/cache is likewise unaffected.
+# Stating this closes the CodeQL actions/missing-workflow-permissions finding, which fires on the
+# default token being left at whatever the repository hands out.
+permissions:
+  contents: read
 
 jobs:
   ci:
@@ -57,11 +69,17 @@ jobs:
       # guarantees exists and keeps committed, so the key only moves when a
       # dependency actually changes. The glob is quoted because a leading `*` would
       # otherwise be read as a YAML alias.
+      #
+      # The tool manifest is hashed alongside them because `make coverage` restores
+      # the pinned local tools into that same folder, and nothing else in the key
+      # moves when a tool version is bumped.
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
           cache: true
-          cache-dependency-path: '**/packages.lock.json'
+          cache-dependency-path: |
+            **/packages.lock.json
+            .config/dotnet-tools.json
 
       # Cache pre-commit hook environments keyed on the config so unchanged
       # hooks are not rebuilt on every run.
@@ -70,5 +88,61 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
 
+      # The historical context the test report attaches to each reported failure ("failed 2 of 3
+      # prior runs") comes from a small snapshot that `make test` reads before the run and rewrites
+      # afterwards (TEST_HISTORY_DIR in the Makefile). The reporter deliberately does not move that
+      # file between runs, so the workflow has to — which is exactly the kind of platform-specific
+      # plumbing that belongs here rather than in the Makefile. A cache is the vehicle instead of an
+      # artifact because artifacts are scoped to the run that produced them and would have to be
+      # hunted down through the API.
+      #
+      # restore and save are separate steps rather than the combined actions/cache used above for
+      # two reasons: the combined action saves only when the job succeeds, and a failing run is
+      # precisely the one whose outcome the next run needs; and a save is rejected when its key
+      # already exists, so the key has to move every run. Hence the rolling run_id key paired with a
+      # prefix restore-key, which resolves to the most recent earlier snapshot.
+      - uses: actions/cache/restore@v6
+        with:
+          path: artifacts/test-history
+          key: gh-test-history-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: gh-test-history-${{ runner.os }}-
+
       # The single entrypoint. Everything CI does is defined in the Makefile.
       - run: make ci
+
+      # What the reporter writes to the job summary is a rendering; these are the files. The TRX report
+      # and the merged Cobertura report otherwise live and die on the runner, since artifacts/ is
+      # gitignored — so without this step there is no way to open a test result, feed coverage to
+      # another tool, or compare two runs after the fact.
+      #
+      # always(), for the same reason the history cache below is saved unconditionally: the run whose
+      # reports someone wants to download is the red one. if-no-files-found stays at a warning because
+      # `make ci` legitimately produces nothing here when it stops in `lint`, before any test runs.
+      #
+      # No permissions block is needed: the artifact API is reached with the runner's own artifact
+      # token, not the GITHUB_TOKEN scoped at the top of this file. The Html report inside the zip is
+      # browsable only after downloading; serving it in place would mean GitHub Pages, which is a
+      # publishing decision this template does not make for its consumers.
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ci-reports
+          path: |
+            artifacts/test-results/
+            artifacts/coverage/
+          if-no-files-found: warn
+          # Matched to TEST_HISTORY_WINDOW_DAYS in the Makefile, so a failure's report is still
+          # downloadable for as long as the summary keeps claiming it happened.
+          retention-days: 30
+
+      # always(), because a red run is the one whose outcome most needs recording: without it the
+      # history would be a record of green runs only, and no failure would ever look repeated.
+      # continue-on-error, because the snapshot is a nicety in a job summary and must never be the
+      # thing that fails a build — it is legitimately absent when `make ci` stopped in `lint`, before
+      # any test ran.
+      - uses: actions/cache/save@v6
+        if: always()
+        continue-on-error: true
+        with:
+          path: artifacts/test-history
+          key: gh-test-history-${{ runner.os }}-${{ github.run_id }}

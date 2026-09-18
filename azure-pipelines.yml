@@ -43,6 +43,16 @@ steps:
     inputs:
       versionSpec: "3.14"
 
+  # The .NET SDK. useGlobalJson points the task at the same global.json the build itself resolves
+  # through, so the agent compiles with exactly the pinned SDK and `make check-dotnet` cannot fail
+  # here. This is the counterpart of actions/setup-dotnet in .github/workflows/ci.yml, and it exists
+  # for the same reason UsePythonVersion does: installing a prerequisite toolchain is an agent concern
+  # that cannot live in a portable script. The Makefile only verifies the SDK; it never installs one.
+  - task: UseDotNet@2
+    inputs:
+      packageType: sdk
+      useGlobalJson: true
+
   # Cache pre-commit hook environments keyed on the config so unchanged hooks
   # are not rebuilt on every run.
   - task: Cache@2
@@ -53,3 +63,29 @@ steps:
   # The single entrypoint. Everything CI does is defined in the Makefile.
   - script: make ci
     displayName: make ci
+
+  # `make ci` writes a TRX report per test module and one merged Cobertura report; these two tasks are
+  # what turn them into the Tests and Code Coverage tabs on the run. Azure DevOps renders both formats
+  # first-class, so there is nothing to publish as a plain artifact here — unlike GitHub Actions, whose
+  # workflow uploads the same files as a downloadable zip because it has no such UI.
+  #
+  # succeededOrFailed(), because the run worth reading the results of is the one that failed; make has
+  # already decided the build's outcome by then, so neither task is allowed to influence it —
+  # failTaskOnFailedTests stays off and an empty coverage file is not an error. Both are legitimately
+  # absent when `make ci` stopped in `lint`, which each task reports as a warning.
+  - task: PublishTestResults@2
+    condition: succeededOrFailed()
+    displayName: Publish test results
+    inputs:
+      testResultsFormat: VSTest
+      testResultsFiles: artifacts/test-results/*.trx
+      mergeTestResults: true
+      failTaskOnFailedTests: false
+
+  - task: PublishCodeCoverageResults@2
+    condition: succeededOrFailed()
+    displayName: Publish code coverage
+    inputs:
+      summaryFileLocation: artifacts/coverage/Cobertura.xml
+      pathToSources: $(Build.SourcesDirectory)
+      failIfCoverageEmpty: false
