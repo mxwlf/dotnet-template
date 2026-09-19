@@ -167,7 +167,11 @@ portable script:
 - **Triggers** (which branches/events run CI) — expressed differently on each
   platform. Both stubs ship pre-configured to run CI on:
   - **pushes** to `main` and `develop`, and
-  - **pull requests** targeting `develop`.
+  - **pull requests** targeting `main` and `develop`
+    ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) or `develop` alone
+    ([`azure-pipelines.yml`](azure-pipelines.yml)). A pull request that never
+    triggers a run cannot be gated on one — widen the Azure stub before relying
+    on [Making CI a merge gate](#making-ci-a-merge-gate) there.
 
   Adjust the `on`/`trigger`/`pr` sections in
   [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
@@ -181,8 +185,76 @@ portable script:
   platform's settings/YAML, never in the repo.
 - **Runner/agent image** and **which Python interpreter is on the agent** (the
   base for `.venv`).
+- **Merge gating** — making a green run *mandatory* is a repository setting, not
+  a pipeline setting. See [Making CI a merge gate](#making-ci-a-merge-gate).
 
 Everything else — the actual checks — is shared via `make ci`.
+
+### Making CI a merge gate
+
+Running CI is not the same as requiring it. Nothing in this repository can stop
+a commit from reaching `main` — the hooks in [`.githooks/`](.githooks) are
+client-side and `git commit --no-verify` skips them, so enforcement has to live
+on the server, in the forge.
+
+**GitHub.** The gate is a [repository
+ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets),
+shipped here as
+[`.github/rulesets/protect-main.json`](.github/rulesets/protect-main.json) so it
+is reviewable and reproducible rather than click-configured. Import it from
+**Settings → Rules → Rulesets → New ruleset → Import**, or apply it with the
+[GitHub CLI](https://cli.github.com):
+
+```sh
+# create
+gh api repos/OWNER/REPO/rulesets --method POST \
+  --input .github/rulesets/protect-main.json
+
+# update an existing one (find its id with: gh api repos/OWNER/REPO/rulesets)
+gh api repos/OWNER/REPO/rulesets/RULESET_ID --method PUT \
+  --input .github/rulesets/protect-main.json
+```
+
+It targets the default branch and requires the **`ci`** check — the job id in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml), which is also the check
+name GitHub reports — to pass before anything merges. Changes must arrive by
+pull request, history stays linear, commits must be signed, and force-pushes and
+deletions are refused.
+
+Two settings decide whether that gate is real, and both are easy to get wrong:
+
+- **`bypass_actors` must stay empty.** An actor listed there bypasses *every*
+  rule in the ruleset, required status checks included, so a repository that
+  grants its own maintainer `"always"` bypass has a gate that binds nobody. The
+  shipped file grants bypass to no one.
+- **`required_approving_review_count` is `0`, deliberately.** You cannot approve
+  your own pull request, so on a solo or two-person repository a non-zero count
+  makes merging impossible without a bypass — and that bypass then nullifies the
+  CI requirement as well. Requiring a pull request while requiring *zero*
+  approvals keeps CI as the gate and keeps the repository usable. Raise the
+  count once there are enough reviewers to satisfy it, and add a `CODEOWNERS`
+  file before turning `require_code_owner_review` back on, since the rule is
+  inert without one.
+
+`strict_required_status_checks_policy` is `true`, which additionally requires a
+branch to be up to date with the default branch before it merges. Without it a
+stale-but-green run can merge and break `main`, because the check passed against
+an older base.
+
+One honest limit: with `squash` and `rebase` merges the commit that lands on the
+default branch is a *new* commit that CI never ran on, so what the gate
+guarantees is that the reviewed *content* was green, not that a run exists for
+that exact SHA. The `push` trigger on `main` records the truth afterwards but
+cannot block. Closing that last gap needs a [merge
+queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue),
+which is only available on repositories owned by an organization.
+
+**Azure DevOps.** There is no repository-side equivalent in YAML — for Azure
+Repos the `pr:` trigger in [`azure-pipelines.yml`](azure-pipelines.yml) is
+ignored entirely. Gate the branch instead with **Repos → Branches → `main` →
+Branch policies → Build Validation**, pointing at this pipeline with *Policy
+requirement* set to **Required**. The same two traps apply: keep the reviewer
+minimum satisfiable, and leave "Allow bypass" off.
 
 ### Where the reports appear
 
