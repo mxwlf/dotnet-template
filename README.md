@@ -321,10 +321,53 @@ directories are gitignored, so the pipelines are what make them visible:
 | The report files themselves (TRX, merged Cobertura, browsable HTML) | The **`ci-reports`** artifact on the run Summary page — uploaded even when the run is red, kept 30 days |
 | Failure history snapshot | **GitHub Actions → Caches** (`gh-test-history-…`); its contents only surface inside the job summary |
 | Test results and coverage on Azure DevOps | The run's native **Tests** and **Code Coverage** tabs |
+| The SBOM | Inside the same **`ci-reports`** artifact on GitHub; a separate **`sbom`** pipeline artifact on Azure DevOps, which has no tab to render one |
 
 Locally, `make coverage` prints the same coverage figures to the terminal and
 leaves `artifacts/coverage/index.html` to open in a browser. The GitHub-specific
 output is inert off a runner, so one command behaves correctly in both places.
+
+### The SBOM
+
+`make sbom` writes an SPDX 2.2 document to
+`artifacts/sbom/_manifest/spdx_2.2/manifest.spdx.json` using
+[Microsoft's sbom-tool](https://github.com/microsoft/sbom-tool), pinned in
+[`.config/dotnet-tools.json`](.config/dotnet-tools.json) like every other local
+tool. It runs as part of `make ci`, so every pull request produces one and a
+dependency added without its lockfile updated shows up immediately. The document's
+version comes from `nbgv`, so it is derived from the commit rather than hand-set.
+
+Two characteristics are worth understanding before you rely on it, because both
+are properties of how .NET SBOMs are built rather than bugs to file:
+
+- **Its scope is every project that was built, tests included.** The dependency
+  data comes from `project.assets.json` — the file NuGet writes the resolved graph
+  into — and the default covers the whole build. For a project that ships one
+  artifact, narrow it:
+
+  ```sh
+  make sbom SBOM_BUILD_DROP=artifacts/bin/library.example \
+            SBOM_COMPONENT_PATH=artifacts/obj/library.example
+  ```
+
+  which here takes 46 packages down to the 12 the library actually resolves.
+- **Analyzers and other build-only packages are listed.** SonarAnalyzer,
+  Roslynator, SourceLink and `nbgv` are real `PackageReference`s in
+  `assets.json`, and detection cannot distinguish a compile-time dependency from
+  one that ships. Read the result as *what this build consumed*, which is
+  accurate, rather than *what the artifact contains*.
+
+Note that `SBOM_COMPONENT_PATH` must point at `artifacts/obj` and not at `src/`.
+`UseArtifactsOutput` relocates `obj/` out of the project directories, and a
+component path with no `assets.json` under it produces a **valid SBOM containing
+zero packages** rather than an error — a quiet failure worth knowing about.
+
+License enrichment (`-li`) is deliberately not enabled: it calls the
+ClearlyDefined API, which would put a third-party service on the critical path of
+a green build.
+
+An SBOM is an inventory, not a vulnerability scan. It is what makes scanning
+possible; CodeQL and Dependabot are the scanning layer.
 
 ### Determinism
 
@@ -356,6 +399,7 @@ Bump these versions deliberately when you want to upgrade.
 | `make build` | Build every project with analyzers enforced. |
 | `make test` | Run every test project, writing the TRX report and Cobertura coverage into `artifacts/test-results/`. On GitHub Actions, also emits the test report (log groups, failure annotations, job summary) and updates the history snapshot in `artifacts/test-history/`. |
 | `make coverage` | Merge every module's Cobertura file into one report in `artifacts/coverage/` (Cobertura, markdown, text, HTML) and fail below `COVERAGE_MIN_LINE`. On GitHub Actions, appends the merged figures to the job summary. |
+| `make sbom` | Generate an SPDX 2.2 SBOM for the build into `artifacts/sbom/`. Part of `make ci`. |
 | `make tools` | Restore the pinned local .NET tools from `.config/dotnet-tools.json`. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |

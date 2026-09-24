@@ -94,3 +94,21 @@ steps:
       summaryFileLocation: artifacts/coverage/Cobertura.xml
       pathToSources: $(Build.SourcesDirectory)
       failIfCoverageEmpty: false
+
+  # The SBOM has no dedicated tab to render into, unlike the two reports above, so it is published as
+  # a plain pipeline artifact — the Azure counterpart of the upload-artifact step in
+  # .github/workflows/ci.yml. succeededOrFailed() for the same reason the tasks above use it: the run
+  # whose inventory someone wants is as likely to be the red one. The condition also tolerates
+  # `make ci` having stopped in `lint`, before `sbom` ran, which is why the path is checked first —
+  # PublishPipelineArtifact fails outright on a missing path rather than warning.
+  - script: |
+      if [ -d artifacts/sbom ]; then echo '##vso[task.setvariable variable=sbomExists]true'; fi
+    condition: succeededOrFailed()
+    displayName: Check for SBOM
+
+  - task: PublishPipelineArtifact@1
+    condition: and(succeededOrFailed(), eq(variables['sbomExists'], 'true'))
+    displayName: Publish SBOM
+    inputs:
+      targetPath: artifacts/sbom
+      artifact: sbom

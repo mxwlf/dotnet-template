@@ -138,6 +138,7 @@ jobs:
           path: |
             artifacts/test-results/
             artifacts/coverage/
+            artifacts/sbom/
           if-no-files-found: warn
           # Matched to TEST_HISTORY_WINDOW_DAYS in the Makefile, so a failure's report is still
           # downloadable for as long as the summary keeps claiming it happened.
