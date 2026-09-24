@@ -76,6 +76,26 @@ reach the default branch. Merge commits are the only method that both satisfies
 the signing rule and keeps the author's signatures in history. The cost is that
 the default branch is not linear; that is the deliberate trade.
 
+## The ruleset cannot enable a merge method the repository forbids
+
+`allowed_merge_methods` only *narrows* what the repository already permits. The
+repository has its own `allow_merge_commit` / `allow_squash_merge` /
+`allow_rebase_merge` switches, they are not part of any ruleset, and this file
+cannot set them. Ask for a method the repository has switched off and the merge is
+refused outright:
+
+> Merge commits are not allowed on this repository.
+
+So a repo adopting this ruleset needs merge commits enabled as well — under
+**Settings → General → Pull Requests**, or:
+
+```sh
+gh api --method PATCH repos/OWNER/REPO -F allow_merge_commit=true
+```
+
+This is the one part of the gate that `make rulesets-apply` cannot reproduce for
+you, because it lives on the repository rather than in a ruleset.
+
 ## The required check must actually run
 
 A required status check that is never reported is never green, so the pull request
