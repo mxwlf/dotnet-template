@@ -35,7 +35,10 @@ pr:
       - main
 
 pool:
-  vmImage: ubuntu-latest
+  # Pinned rather than `ubuntu-latest`: that label is remapped to a new Ubuntu release
+  # periodically, which would change the build environment underneath you on Microsoft's
+  # schedule instead of yours. Bump this deliberately.
+  vmImage: ubuntu-24.04
 
 steps:
   # Interpreter used to build .venv. Any version >= 3.10 works (see MIN_PYTHON
