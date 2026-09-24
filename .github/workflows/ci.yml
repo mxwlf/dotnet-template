@@ -22,13 +22,18 @@
 name: ci
 
 on:
+  # Trunk-based: `main` is the only long-lived branch. Feature branches are short-lived and reach
+  # `main` only through a pull request, so the pull_request trigger is the gate — it fires for a pull
+  # request from ANY head branch, which is why no head-branch list is needed here. It also earns its
+  # keep beyond gating: the test reporter annotates failed and skipped tests on the pull request's own
+  # "Files changed" diff, and a pull request that never triggers a run gets none of that.
+  #
+  # The push trigger covers `main` only, deliberately: adding feature branches would run the same
+  # commits twice (once for the push, once for the pull request) for no extra signal.
   push:
-    branches: [main, develop]
-  # Both long-lived branches are covered, not just develop: the test reporter annotates failed and
-  # skipped tests on the pull request's own "Files changed" diff, and a pull request that never
-  # triggers a run gets none of that.
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 # Least privilege for the automatically provisioned GITHUB_TOKEN, and the narrowest set that still
 # works: checkout reads the repository, and nothing else here touches the API. The test reporter

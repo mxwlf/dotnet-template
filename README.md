@@ -166,12 +166,14 @@ portable script:
   `make ci`.
 - **Triggers** (which branches/events run CI) — expressed differently on each
   platform. Both stubs ship pre-configured to run CI on:
-  - **pushes** to `main` and `develop`, and
-  - **pull requests** targeting `main` and `develop`
-    ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) or `develop` alone
-    ([`azure-pipelines.yml`](azure-pipelines.yml)). A pull request that never
-    triggers a run cannot be gated on one — widen the Azure stub before relying
-    on [Making CI a merge gate](#making-ci-a-merge-gate) there.
+  - **pushes** to `main`, and
+  - **pull requests** targeting `main`, from any source branch.
+
+  A pull request that never triggers a run cannot be gated on one, so the
+  pull-request trigger must cover every branch you gate — see [Making CI a merge
+  gate](#making-ci-a-merge-gate). Feature branches are intentionally absent from
+  the push trigger: a branch with an open pull request would otherwise build the
+  same commits twice for no extra signal.
 
   Adjust the `on`/`trigger`/`pr` sections in
   [`.github/workflows/ci.yml`](.github/workflows/ci.yml) and
@@ -201,25 +203,29 @@ on the server, in the forge.
 ruleset](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets),
 shipped here as
 [`.github/rulesets/protect-main.json`](.github/rulesets/protect-main.json) so it
-is reviewable and reproducible rather than click-configured. Import it from
-**Settings → Rules → Rulesets → New ruleset → Import**, or apply it with the
-[GitHub CLI](https://cli.github.com):
+is reviewable and reproducible rather than click-configured. Apply it with:
 
 ```sh
-# create
-gh api repos/OWNER/REPO/rulesets --method POST \
-  --input .github/rulesets/protect-main.json
-
-# update an existing one (find its id with: gh api repos/OWNER/REPO/rulesets)
-gh api repos/OWNER/REPO/rulesets/RULESET_ID --method PUT \
-  --input .github/rulesets/protect-main.json
+make rulesets-apply     # create/update the ruleset on GitHub
+make rulesets-diff      # fail if GitHub no longer matches the repo
+make rulesets-export    # pull GitHub's version back in (after a UI edit)
 ```
+
+These need the [GitHub CLI](https://cli.github.com), authenticated with admin
+rights on the repository; unlike everything else here, `gh` is **not** installed
+by `make setup`. The ruleset is reconciled **by name**, not by id: GitHub assigns
+ruleset ids per repository, so a committed id would be meaningless in a repo
+created from this template. `apply` looks up the name, updates the ruleset if it
+exists and creates it if it does not — so it is idempotent and works on a fresh
+repo. It never *deletes*; see
+[`.github/rulesets/README.md`](.github/rulesets/README.md) for that and for the
+full rule-by-rule breakdown.
 
 It targets the default branch and requires the **`ci`** check — the job id in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which is also the check
 name GitHub reports — to pass before anything merges. Changes must arrive by
-pull request, history stays linear, commits must be signed, and force-pushes and
-deletions are refused.
+pull request, commits must be signed, CodeQL and code-quality findings must be
+clean, and force-pushes and deletions are refused.
 
 Two settings decide whether that gate is real, and both are easy to get wrong:
 
@@ -241,11 +247,15 @@ branch to be up to date with the default branch before it merges. Without it a
 stale-but-green run can merge and break `main`, because the check passed against
 an older base.
 
-One honest limit: with `squash` and `rebase` merges the commit that lands on the
-default branch is a *new* commit that CI never ran on, so what the gate
-guarantees is that the reviewed *content* was green, not that a run exists for
-that exact SHA. The `push` trigger on `main` records the truth afterwards but
-cannot block. Closing that last gap needs a [merge
+One honest limit: the merge commit that lands on the default branch is a *new*
+commit that CI never ran on, so what the gate guarantees is that the reviewed
+*content* was green, not that a run exists for that exact SHA. Because
+`strict_required_status_checks_policy` forces the branch to be up to date first,
+the tree that lands is the tree that was tested — and unlike a squash or a
+rebase, a merge commit keeps the tested commit itself in history as its second
+parent, so the run still maps to a real commit on the default branch. The `push`
+trigger on `main` records the truth afterwards but cannot block. Closing that last
+gap needs a [merge
 queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue),
 which is only available on repositories owned by an organization.
 
@@ -255,6 +265,36 @@ ignored entirely. Gate the branch instead with **Repos → Branches → `main` �
 Branch policies → Build Validation**, pointing at this pipeline with *Policy
 requirement* set to **Required**. The same two traps apply: keep the reviewer
 minimum satisfiable, and leave "Allow bypass" off.
+
+### The workflow these rules require
+
+The workflow is **trunk-based**. `main` is the only long-lived branch: there is no
+`develop` to stage through, and no release branches. Everything else is a
+short-lived branch that exists just long enough to carry one pull request, and is
+deleted after it merges.
+
+With `protect-main` active, `main` cannot be written to directly. Every change
+reaches it the same way:
+
+1. **Branch off `main`.** Name it however you like — the rules place no constraint
+   on source branches, and a feature branch needs no protection of its own, since
+   it cannot reach `main` except through the gate below. Keep it short-lived; the
+   point of trunk-based work is that branches merge in days, not weeks. Commits
+   are checked locally by the hooks from `make setup`.
+2. **Open a pull request into `main`.** A direct `git push origin main` is rejected
+   by the ruleset, as is a force-push and a branch deletion.
+3. **Let `ci` finish and pass.** It is a required check, so the merge button stays
+   disabled until it reports success, and the branch must be up to date with
+   `main` first. CodeQL and code-quality findings must be clean too.
+4. **Merge with a merge commit, then delete the branch.** `main` accepts *only*
+   merge commits — squash and rebase are not offered, because both rewrite history
+   and discard the signature you made. A merge commit leaves your commits intact
+   and GitHub signs the merge commit itself, satisfying `required_signatures`.
+
+Because `bypass_actors` is empty, none of this is bypassable — not by you either.
+A change that cannot pass `ci` cannot reach `main` without first editing the
+ruleset. That is the intended property; it is also worth knowing before you need
+to land an urgent fix.
 
 ### Where the reports appear
 
@@ -306,6 +346,9 @@ Bump these versions deliberately when you want to upgrade.
 | `make tools` | Restore the pinned local .NET tools from `.config/dotnet-tools.json`. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
+| `make rulesets-apply` | Create/update this repo's GitHub ruleset from `.github/rulesets/`. Needs `gh`. |
+| `make rulesets-diff` | Report drift between `.github/rulesets/` and the live ruleset. Needs `gh`. |
+| `make rulesets-export` | Overwrite `.github/rulesets/` with the live ruleset. Needs `gh`. |
 
 Override the interpreter for any of these with `PYTHON=...`, e.g.
 `make setup PYTHON=python3.12`.
