@@ -46,7 +46,10 @@ permissions:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    # Pinned rather than `ubuntu-latest`: that label is remapped to a new Ubuntu release
+    # periodically, which would change the build environment underneath you on GitHub's
+    # schedule instead of yours. Bump this deliberately.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
 

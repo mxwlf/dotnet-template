@@ -1,4 +1,4 @@
-# Makefile for git-template
+# Makefile for dotnet-template
 #
 # Provides one-command setup for this repository's shared git configuration
 # and pre-commit hooks.

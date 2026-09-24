@@ -1,4 +1,4 @@
-# git-template
+# dotnet-template
 
 My baseline git template. It ships a shared git configuration and a set of
 [pre-commit](https://pre-commit.com) hooks so every repo started from this
@@ -227,20 +227,28 @@ name GitHub reports — to pass before anything merges. Changes must arrive by
 pull request, commits must be signed, CodeQL and code-quality findings must be
 clean, and force-pushes and deletions are refused.
 
-Two settings decide whether that gate is real, and both are easy to get wrong:
+Two settings decide how real that gate is, and both are easy to get wrong:
 
-- **`bypass_actors` must stay empty.** An actor listed there bypasses *every*
-  rule in the ruleset, required status checks included, so a repository that
-  grants its own maintainer `"always"` bypass has a gate that binds nobody. The
-  shipped file grants bypass to no one.
-- **`required_approving_review_count` is `0`, deliberately.** You cannot approve
-  your own pull request, so on a solo or two-person repository a non-zero count
-  makes merging impossible without a bypass — and that bypass then nullifies the
-  CI requirement as well. Requiring a pull request while requiring *zero*
-  approvals keeps CI as the gate and keeps the repository usable. Raise the
-  count once there are enough reviewers to satisfy it, and add a `CODEOWNERS`
-  file before turning `require_code_owner_review` back on, since the rule is
-  inert without one.
+- **`required_approving_review_count` is `1`, with a review dismissed on every
+  push** (`dismiss_stale_reviews_on_push`). You cannot approve your own pull
+  request, so on a solo or two-person repository this is *not* satisfiable on its
+  own — it only works because of the bypass below. Add a `CODEOWNERS` file before
+  turning `require_code_owner_review` back on, since that rule is inert without
+  one.
+- **`bypass_actors` grants the repository admin role a `"pull_request"` bypass.**
+  This is what makes the approval above satisfiable, and it is a deliberate
+  loosening: an admin can merge a pull request whose `ci` check is red. The gate
+  stops an *accidental* merge of a failing build, not a determined one. The
+  narrower `"pull_request"` mode is used rather than `"always"`, so direct pushes
+  to the default branch stay blocked even for an admin.
+
+  If you want the CI requirement to be absolute instead, empty `bypass_actors`
+  **and** drop the approval count back to `0` in the same edit — an empty bypass
+  with a non-zero count leaves a repository nobody can merge into. Requiring a
+  pull request while requiring zero approvals keeps CI as the only gate and keeps
+  the repository usable; that is the right configuration for a repo with no second
+  reviewer, and it is what this file shipped with before it was aligned to
+  `git-template`.
 
 `strict_required_status_checks_policy` is `true`, which additionally requires a
 branch to be up to date with the default branch before it merges. Without it a
@@ -291,10 +299,11 @@ reaches it the same way:
    and discard the signature you made. A merge commit leaves your commits intact
    and GitHub signs the merge commit itself, satisfying `required_signatures`.
 
-Because `bypass_actors` is empty, none of this is bypassable — not by you either.
-A change that cannot pass `ci` cannot reach `main` without first editing the
-ruleset. That is the intended property; it is also worth knowing before you need
-to land an urgent fix.
+The approval in step 3 is not satisfiable on a solo repository — you cannot approve
+your own pull request — so merging relies on the repository admin's
+`"pull_request"` bypass. That means the gate prevents an accidental merge of a red
+build rather than a determined one. See the two settings under [Making CI a merge
+gate](#making-ci-a-merge-gate) for how to make it absolute instead.
 
 ### Where the reports appear
 
@@ -326,6 +335,10 @@ output is inert off a runner, so one command behaves correctly in both places.
   [`.pre-commit-config.yaml`](.pre-commit-config.yaml).
 - Both CI stubs pin the interpreter used to build `.venv` (currently 3.14) for
   reproducible runs. Any `>= 3.10` works; the pin is not a hook requirement.
+- Both stubs pin the runner/agent image (currently `ubuntu-24.04`) instead of
+  using `ubuntu-latest`. That label is remapped to a new Ubuntu release
+  periodically, which would move the build environment on the platform's
+  schedule rather than yours.
 - Both stubs cache pre-commit hook environments keyed on the config file, so
   unchanged hooks are not rebuilt.
 

@@ -29,8 +29,8 @@ from this template.
 | Direct pushes | blocked — pull request required, from any branch |
 | Required check | `ci` (GitHub Actions) |
 | Branch must be up to date | yes (`strict_required_status_checks_policy`) |
-| Approvals | 0 — see below |
-| Bypass actors | **none** |
+| Approvals | 1, dismissed on every push |
+| Bypass actors | repository admin, `"pull_request"` mode |
 | Merge methods | merge commits only |
 | Signed commits | required |
 | Code scanning | CodeQL, errors / high-or-higher security alerts |
@@ -39,17 +39,21 @@ from this template.
 
 Four things about this configuration are load-bearing and easy to break:
 
-- **`bypass_actors` must stay empty.** An actor listed there bypasses *every* rule
-  in the ruleset, required status checks included, so granting a maintainer
-  `"always"` bypass leaves a gate that binds nobody. Nothing is granted bypass
-  here, which makes the CI requirement absolute.
-- **`required_approving_review_count` is `0`, deliberately.** You cannot approve
-  your own pull request, so on a solo or two-person repository a non-zero count
-  makes merging impossible *without* a bypass — and that bypass then nullifies the
-  CI requirement too. Requiring a pull request while requiring zero approvals
-  keeps CI as the real gate and keeps the repository usable. Raise it once there
-  are reviewers to satisfy it, and add a `CODEOWNERS` file before turning
-  `require_code_owner_review` back on, since that rule is inert without one.
+- **`required_approving_review_count` is `1` and `bypass_actors` grants the admin
+  role a `"pull_request"` bypass.** These two go together and must be changed
+  together. You cannot approve your own pull request, so the approval is not
+  satisfiable on a solo repository without the bypass; and the bypass, being a
+  ruleset-wide exemption, also lets an admin merge past a red `ci`. The result
+  prevents an accidental merge of a failing build, not a determined one.
+
+  `"pull_request"` mode is used rather than `"always"` so that direct pushes to the
+  default branch stay blocked even for an admin.
+
+  To make the CI requirement absolute, empty `bypass_actors` **and** set the
+  approval count back to `0` in the same edit — an empty bypass with a non-zero
+  count leaves a repository nobody can merge into. Add a `CODEOWNERS` file before
+  turning `require_code_owner_review` back on, since that rule is inert without
+  one.
 - **The merge method is a merge commit, to preserve authorship.** A merge commit
   adds one new object and leaves the branch's own commits untouched, so each keeps
   the signature its author made, while GitHub signs the merge commit itself to
