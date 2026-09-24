@@ -66,7 +66,7 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./scripts/github-rulesets.sh
 
-.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage \
+.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage sbom \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
@@ -127,7 +127,7 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint build test coverage ## Run the full CI check suite (what pipelines invoke)
+ci: lint build test coverage sbom ## Run the full CI check suite (what pipelines invoke)
 
 # The dotnet-build-test hook builds and tests the staged tree on `git commit`. `ci` reaches the same
 # code through its own `build` and `test` targets, so the hook is skipped here: leaving it in would
@@ -329,3 +329,86 @@ coverage: tools test ## Merge every module's coverage into $(COVERAGE_DIR) and e
 		cat "$(COVERAGE_DIR)/Summary.txt"; \
 	fi; \
 	exit $$status
+
+# ---------------------------------------------------------------------------
+# SBOM
+# ---------------------------------------------------------------------------
+# Generates an SPDX 2.2 SBOM with Microsoft's sbom-tool, pinned in
+# .config/dotnet-tools.json like every other local tool.
+#
+# WHY THIS TARGET IS .NET-SPECIFIC WHILE ITS CONTRACT IS NOT: an SBOM's substance
+# is the resolved dependency graph, and that graph only exists inside an
+# ecosystem's resolver — here NuGet's, via the packages.lock.json files that
+# RestorePackagesWithLockFile (Directory.Build.props) keeps committed. What IS
+# portable is the contract: a `sbom` target in the `ci` chain writing into
+# $(ARTIFACTS_DIR), published by the CI stubs alongside the test and coverage
+# reports. git-template documents that contract; this file implements it.
+#
+# Both paths below are variables because they are the project-specific part. A
+# project that publishes a real drop should point SBOM_BUILD_DROP at its
+# `dotnet publish` output rather than the whole bin tree.
+SBOM_DIR ?= $(ARTIFACTS_DIR)/sbom
+
+# The files the SBOM inventories.
+SBOM_BUILD_DROP ?= $(ARTIFACTS_DIR)/bin
+
+# Where sbom-tool looks for dependencies. This must point at project.assets.json,
+# NOT at the source tree: assets.json is the file NuGet writes the *resolved*
+# graph into, and it is what component detection reads. Pointing this at `src`
+# finds nothing at all — it silently produces an SBOM with zero packages, because
+# UseArtifactsOutput (Directory.Build.props) relocates obj/ out of the project
+# directories and into $(ARTIFACTS_DIR)/obj.
+#
+# Two things about the default scope are worth knowing, because both are
+# properties of assets-based detection rather than mistakes to fix:
+#
+#   * It covers EVERY project that was built, test projects included, so
+#     test-only packages appear in the SBOM. Narrow it for a project that ships
+#     one artifact by pointing both variables at that project, e.g.
+#         make sbom SBOM_BUILD_DROP=$(ARTIFACTS_DIR)/bin/library.example \
+#                   SBOM_COMPONENT_PATH=$(ARTIFACTS_DIR)/obj/library.example
+#     which here narrows 46 packages down to the 12 the library actually
+#     resolves.
+#   * Analyzers and build-time-only packages (SonarAnalyzer, Roslynator,
+#     SourceLink, Nerdbank.GitVersioning ...) are included even though they are
+#     `PrivateAssets` and ship nothing. They are genuine PackageReferences in
+#     assets.json, and detection cannot tell a compile-time dependency from a
+#     runtime one. Treat the result as "what this build consumed", which is the
+#     honest reading, rather than "what the artifact contains".
+SBOM_COMPONENT_PATH ?= $(ARTIFACTS_DIR)/obj
+
+SBOM_PACKAGE_NAME ?= $(basename $(SOLUTION))
+SBOM_PACKAGE_SUPPLIER ?= mxwlf
+SBOM_NAMESPACE_BASE ?= https://github.com/mxwlf/dotnet-template
+
+sbom: tools build ## Generate an SPDX 2.2 SBOM for the build output into $(SBOM_DIR)
+	@set -e; \
+	version="$$(dotnet nbgv get-version --variable SemVer2)"; \
+	echo "make: SBOM for $(SBOM_PACKAGE_NAME) $$version"; \
+	mkdir -p "$(SBOM_DIR)"; \
+	dotnet sbom-tool generate \
+		-b "$(SBOM_BUILD_DROP)" \
+		-bc "$(SBOM_COMPONENT_PATH)" \
+		-m "$(SBOM_DIR)" \
+		-pn "$(SBOM_PACKAGE_NAME)" \
+		-pv "$$version" \
+		-ps "$(SBOM_PACKAGE_SUPPLIER)" \
+		-nsb "$(SBOM_NAMESPACE_BASE)" \
+		-mi SPDX:2.2 \
+		-D true \
+		-pm true
+	@echo "make: wrote $(SBOM_DIR)/_manifest/spdx_2.2/manifest.spdx.json"
+
+# Notes on the flags above, since several are deliberate omissions:
+#   -D true   deletes any previous _manifest directory, so `make sbom` is
+#             re-runnable instead of failing on a second local run.
+#   -pm true  parses license and supplier metadata out of the packages already
+#             on disk. Local only; no network.
+#   -li       is NOT passed. It fetches license data from the ClearlyDefined API,
+#             which would put a network call on the critical path of `make ci`
+#             and make a green build depend on a third-party service.
+#   -gt       is NOT passed, so the SPDX creationInfo timestamp is the real
+#             generation time. That makes consecutive SBOMs differ by a
+#             timestamp even for identical input; pinning it to the commit date
+#             would buy byte-reproducibility at the cost of the document lying
+#             about when it was produced.
