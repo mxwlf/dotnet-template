@@ -66,7 +66,7 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./scripts/github-rulesets.sh
 
-.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage sbom \
+.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage pack sbom \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
@@ -127,7 +127,7 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint build test coverage sbom ## Run the full CI check suite (what pipelines invoke)
+ci: lint build test coverage pack sbom ## Run the full CI check suite (what pipelines invoke)
 
 # The dotnet-build-test hook builds and tests the staged tree on `git commit`. `ci` reaches the same
 # code through its own `build` and `test` targets, so the hook is skipped here: leaving it in would
@@ -331,6 +331,27 @@ coverage: tools test ## Merge every module's coverage into $(COVERAGE_DIR) and e
 	exit $$status
 
 # ---------------------------------------------------------------------------
+# PACKAGING
+# ---------------------------------------------------------------------------
+# $(TEST_CONFIG_DIR) is the lower-cased $(CONFIGURATION) that the artifacts output layout uses for
+# its per-configuration subdirectories; it is shared with the test target rather than recomputed.
+PACKAGE_DIR ?= $(ARTIFACTS_DIR)/package/$(TEST_CONFIG_DIR)
+
+# --no-build, because `pack` depends on `build` and would otherwise compile the solution a second
+# time. Both run at $(CONFIGURATION), so the output pack reuses is the one build just produced.
+#
+# Symbol packages come along automatically: IncludeSymbols and SymbolPackageFormat=snupkg in
+# Directory.Build.props mean each .nupkg is accompanied by a .snupkg.
+#
+# Packaging metadata and the readme that ships with the package live in Directory.Build.props and
+# Directory.Build.targets. Test projects set IsPackable=false themselves, so nothing here has to
+# exclude them.
+pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
+	dotnet pack --no-build --configuration $(CONFIGURATION)
+	@ls -1 "$(PACKAGE_DIR)" 2> /dev/null | sed 's/^/make: packed /' || \
+		{ echo 'make: pack produced nothing in $(PACKAGE_DIR).' 1>&2; exit 1; }
+
+# ---------------------------------------------------------------------------
 # SBOM
 # ---------------------------------------------------------------------------
 # Generates an SPDX 2.2 SBOM with Microsoft's sbom-tool, pinned in
@@ -349,8 +370,10 @@ coverage: tools test ## Merge every module's coverage into $(COVERAGE_DIR) and e
 # `dotnet publish` output rather than the whole bin tree.
 SBOM_DIR ?= $(ARTIFACTS_DIR)/sbom
 
-# The files the SBOM inventories.
-SBOM_BUILD_DROP ?= $(ARTIFACTS_DIR)/bin
+# The files the SBOM inventories: the packages that actually ship. Before `pack` existed this
+# pointed at $(ARTIFACTS_DIR)/bin, where 328 of 336 files belonged to the test project's output —
+# an inventory overwhelmingly describing test infrastructure rather than the artifact.
+SBOM_BUILD_DROP ?= $(PACKAGE_DIR)
 
 # Where sbom-tool looks for dependencies. This must point at project.assets.json,
 # NOT at the source tree: assets.json is the file NuGet writes the *resolved*
@@ -362,26 +385,25 @@ SBOM_BUILD_DROP ?= $(ARTIFACTS_DIR)/bin
 # Two things about the default scope are worth knowing, because both are
 # properties of assets-based detection rather than mistakes to fix:
 #
-#   * It covers EVERY project that was built, test projects included, so
-#     test-only packages appear in the SBOM. Narrow it for a project that ships
-#     one artifact by pointing both variables at that project, e.g.
-#         make sbom SBOM_BUILD_DROP=$(ARTIFACTS_DIR)/bin/library.example \
-#                   SBOM_COMPONENT_PATH=$(ARTIFACTS_DIR)/obj/library.example
-#     which here narrows 46 packages down to the 12 the library actually
-#     resolves.
+#   * It is scoped to $(SBOM_PROJECT), the project that ships. Pointing it at
+#     $(ARTIFACTS_DIR)/obj instead would cover every project built and pull in
+#     test-only packages — 46 rather than the 12 the library resolves. A solution
+#     with several packable projects wants one SBOM per package, so override both
+#     $(SBOM_PROJECT) and $(SBOM_BUILD_DROP) per invocation.
 #   * Analyzers and build-time-only packages (SonarAnalyzer, Roslynator,
 #     SourceLink, Nerdbank.GitVersioning ...) are included even though they are
 #     `PrivateAssets` and ship nothing. They are genuine PackageReferences in
 #     assets.json, and detection cannot tell a compile-time dependency from a
 #     runtime one. Treat the result as "what this build consumed", which is the
 #     honest reading, rather than "what the artifact contains".
-SBOM_COMPONENT_PATH ?= $(ARTIFACTS_DIR)/obj
+SBOM_PROJECT ?= library.example
+SBOM_COMPONENT_PATH ?= $(ARTIFACTS_DIR)/obj/$(SBOM_PROJECT)
 
 SBOM_PACKAGE_NAME ?= $(basename $(SOLUTION))
 SBOM_PACKAGE_SUPPLIER ?= mxwlf
 SBOM_NAMESPACE_BASE ?= https://github.com/mxwlf/dotnet-template
 
-sbom: tools build ## Generate an SPDX 2.2 SBOM for the build output into $(SBOM_DIR)
+sbom: tools pack ## Generate an SPDX 2.2 SBOM for the packages in $(PACKAGE_DIR) into $(SBOM_DIR)
 	@set -e; \
 	version="$$(dotnet nbgv get-version --variable SemVer2)"; \
 	echo "make: SBOM for $(SBOM_PACKAGE_NAME) $$version"; \

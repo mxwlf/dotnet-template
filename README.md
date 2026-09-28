@@ -322,6 +322,7 @@ directories are gitignored, so the pipelines are what make them visible:
 | Failure history snapshot | **GitHub Actions → Caches** (`gh-test-history-…`); its contents only surface inside the job summary |
 | Test results and coverage on Azure DevOps | The run's native **Tests** and **Code Coverage** tabs |
 | The SBOM | Inside the same **`ci-reports`** artifact on GitHub; a separate **`sbom`** pipeline artifact on Azure DevOps, which has no tab to render one |
+| The NuGet packages | Their own **`package`** artifact on both platforms — they are the output, not a report, so fetching a build to install or inspect does not mean downloading test results |
 
 Locally, `make coverage` prints the same coverage figures to the terminal and
 leaves `artifacts/coverage/index.html` to open in a browser. The GitHub-specific
@@ -337,27 +338,25 @@ tool. It runs as part of `make ci`, so every pull request produces one and a
 dependency added without its lockfile updated shows up immediately. The document's
 version comes from `nbgv`, so it is derived from the commit rather than hand-set.
 
-Two characteristics are worth understanding before you rely on it, because both
-are properties of how .NET SBOMs are built rather than bugs to file:
+**It describes the packages, not the build tree.** `sbom` depends on `pack`, so its
+file inventory is the `.nupkg` and `.snupkg` in `artifacts/package/<configuration>/`
+— two files — and its dependencies are scoped to `$(SBOM_PROJECT)`, the project that
+ships. A solution with several packable projects wants one SBOM per package:
+override `SBOM_PROJECT` and `SBOM_BUILD_DROP` per invocation.
 
-- **Its scope is every project that was built, tests included.** The dependency
-  data comes from `project.assets.json` — the file NuGet writes the resolved graph
-  into — and the default covers the whole build. For a project that ships one
-  artifact, narrow it:
+That scoping is the whole point, and it is worth seeing what the alternative looked
+like. Pointed at the build tree instead, the same SBOM inventoried **336 files, 328
+of them the test project's output**, and 46 packages including every test-only
+dependency. The shipped library accounted for 8 files and 12 packages.
 
-  ```sh
-  make sbom SBOM_BUILD_DROP=artifacts/bin/library.example \
-            SBOM_COMPONENT_PATH=artifacts/obj/library.example
-  ```
+One characteristic remains, and it is a property of how .NET SBOMs are built rather
+than a bug to file: **analyzers and other build-only packages are listed.**
+SonarAnalyzer, Roslynator, SourceLink and `nbgv` are real `PackageReference`s in
+`project.assets.json`, and detection cannot distinguish a compile-time dependency
+from one that ships. Read the result as *what this build consumed*, which is
+accurate, rather than *what the package contains*.
 
-  which here takes 46 packages down to the 12 the library actually resolves.
-- **Analyzers and other build-only packages are listed.** SonarAnalyzer,
-  Roslynator, SourceLink and `nbgv` are real `PackageReference`s in
-  `assets.json`, and detection cannot distinguish a compile-time dependency from
-  one that ships. Read the result as *what this build consumed*, which is
-  accurate, rather than *what the artifact contains*.
-
-Note that `SBOM_COMPONENT_PATH` must point at `artifacts/obj` and not at `src/`.
+Note that `SBOM_COMPONENT_PATH` must resolve under `artifacts/obj` and not `src/`.
 `UseArtifactsOutput` relocates `obj/` out of the project directories, and a
 component path with no `assets.json` under it produces a **valid SBOM containing
 zero packages** rather than an error — a quiet failure worth knowing about.
@@ -399,7 +398,8 @@ Bump these versions deliberately when you want to upgrade.
 | `make build` | Build every project with analyzers enforced. |
 | `make test` | Run every test project, writing the TRX report and Cobertura coverage into `artifacts/test-results/`. On GitHub Actions, also emits the test report (log groups, failure annotations, job summary) and updates the history snapshot in `artifacts/test-history/`. |
 | `make coverage` | Merge every module's Cobertura file into one report in `artifacts/coverage/` (Cobertura, markdown, text, HTML) and fail below `COVERAGE_MIN_LINE`. On GitHub Actions, appends the merged figures to the job summary. |
-| `make sbom` | Generate an SPDX 2.2 SBOM for the build into `artifacts/sbom/`. Part of `make ci`. |
+| `make pack` | Produce the NuGet packages (`.nupkg` + `.snupkg`) into `artifacts/package/`. Part of `make ci`. |
+| `make sbom` | Generate an SPDX 2.2 SBOM for those packages into `artifacts/sbom/`. Part of `make ci`. |
 | `make tools` | Restore the pinned local .NET tools from `.config/dotnet-tools.json`. |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |

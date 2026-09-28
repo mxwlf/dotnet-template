@@ -144,6 +144,21 @@ jobs:
           # downloadable for as long as the summary keeps claiming it happened.
           retention-days: 30
 
+      # The packages get their own artifact rather than joining ci-reports above, because they are not
+      # reports: they are the thing this repository produces, and someone fetching a build to install
+      # or inspect should not have to download test output to get at it. The .snupkg comes along with
+      # the .nupkg (IncludeSymbols in Directory.Build.props).
+      #
+      # Deliberately NOT if: always(). A package only exists when `make ci` got as far as `pack`, so
+      # limiting this to a successful run lets if-no-files-found be an assertion rather than a shrug:
+      # a green run that somehow produced no package fails here instead of silently uploading nothing.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: artifacts/package/
+          if-no-files-found: error
+          retention-days: 30
+
       # always(), because a red run is the one whose outcome most needs recording: without it the
       # history would be a record of green runs only, and no failure would ever look repeated.
       # continue-on-error, because the snapshot is a nicety in a job summary and must never be the

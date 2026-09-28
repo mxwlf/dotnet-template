@@ -11,4 +11,16 @@
   <ItemGroup Condition="'$(IsTestProject)' != 'true'">
     <InternalsVisibleTo Include="$(AssemblyName).tests.unit" />
   </ItemGroup>
+
+  <!-- $(PackageReadmeFile) names a file that has to be IN the package, and pack fails (NU5039) on a
+       declared readme it cannot find. The repository README is the one that exists, so it is the one
+       that ships.
+
+       This lives here for the same reason as the item above: $(IsPackable) is only final once the
+       project body has been evaluated, and the test project sets it to false itself. Conditioning on
+       it in Directory.Build.props would read the inherited `true` and try to pack a readme into the
+       test project too. -->
+  <ItemGroup Condition="'$(IsPackable)' == 'true'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
 </Project>
