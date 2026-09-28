@@ -328,6 +328,56 @@ Locally, `make coverage` prints the same coverage figures to the terminal and
 leaves `artifacts/coverage/index.html` to open in a browser. The GitHub-specific
 output is inert off a runner, so one command behaves correctly in both places.
 
+### Packaging is opt-in
+
+`make pack` writes `.nupkg` and `.snupkg` files into
+`artifacts/package/<configuration>/`. It runs as part of `make ci`, so a broken
+package — bad metadata, a missing readme, a package-validation failure — fails the
+build rather than being discovered at publish time.
+
+**Nothing is packable unless the project says so.** `Directory.Build.props` sets
+`IsPackable=false` for the whole repository, and a project that ships opts in and
+describes itself:
+
+```xml
+<PropertyGroup>
+  <IsPackable>true</IsPackable>
+  <Description>What this package is.</Description>
+  <PackageTags>your;tags</PackageTags>
+  <PackageReadmeFile>README.md</PackageReadmeFile>
+</PropertyGroup>
+
+<ItemGroup>
+  <None Include="README.md" Pack="true" PackagePath="\" />
+</ItemGroup>
+```
+
+[`src/library.example`](src/library.example) is the worked example, including
+[its own package readme](src/library.example/README.md).
+
+The default is that way round because "packable unless you opt out" is wrong for a
+repository that grows samples, benchmarks, integration-test hosts and internal
+tools — none of which should be publishable by accident. The same reasoning applies
+to *contents*: a project declares every file it puts in its package, because what
+goes into a package describes that package. A shared `Pack` item would put the
+repository README — which documents make targets and CI wiring — into every package
+in the solution, saying nothing useful about any of them.
+
+Shared in `Directory.Build.props` are only facts about the repository rather than
+about any one package: license, authors, copyright, repository and project URLs.
+
+> **Guards on `$(IsPackable)` belong in `Directory.Build.targets`, never in
+> `Directory.Build.props`.** Props is imported *before* the project body, so a
+> condition there reads whatever default is in scope instead of the project's own
+> choice. When `EnablePackageValidation` was guarded in props, the test project —
+> which sets `IsPackable=false` itself — still evaluated to
+> `EnablePackageValidation=true`, and inherited a `PackageReadmeFile` it never
+> packed. `Directory.Build.targets` is imported afterwards and sees the final value.
+
+`PackageIcon` is left commented out in `Directory.Build.props`: it names a file that
+does not exist, and unlike a missing description, pack *fails* (NU5046) on a declared
+icon it cannot find. Add the file and a matching `Pack` item before enabling it.
+
 ### The SBOM
 
 `make sbom` writes an SPDX 2.2 document to
@@ -348,6 +398,10 @@ That scoping is the whole point, and it is worth seeing what the alternative loo
 like. Pointed at the build tree instead, the same SBOM inventoried **336 files, 328
 of them the test project's output**, and 46 packages including every test-only
 dependency. The shipped library accounted for 8 files and 12 packages.
+
+The shipped package appears as a component of its own SBOM, listed twice — once
+detected from the `.nupkg` and once from the `.snupkg`, since both carry the same
+package identity. Same name and version, so it is noise rather than a contradiction.
 
 One characteristic remains, and it is a property of how .NET SBOMs are built rather
 than a bug to file: **analyzers and other build-only packages are listed.**
