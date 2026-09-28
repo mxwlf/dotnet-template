@@ -33,17 +33,28 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
-<!--    <IsPackable>true</IsPackable>-->
-<!--    <PackageLicenseExpression>MIT</PackageLicenseExpression>-->
-<!--    <PackageReadmeFile>README.md</PackageReadmeFile>-->
+    <!-- Packaging. Every project inherits IsPackable; test projects opt out for themselves
+         (see the test csproj), which is why this can be set unconditionally here.
+
+         The metadata below is not optional decoration: $(TreatWarningsAsErrors) is on in Release,
+         and `dotnet pack` warns about missing Description, Authors and license, so an incomplete
+         block fails `make ci` rather than producing a shabby package.
+
+         PackageIcon stays commented out because it names a file that does not exist, and pack
+         fails outright (NU5046) on a declared icon it cannot find. Add package-icon.png and a
+         matching Pack item before enabling it. -->
+    <IsPackable>true</IsPackable>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
 <!--    <PackageIcon>package-icon.png</PackageIcon>-->
-<!--    <PackageTags>dotnet;library;template</PackageTags>-->
-<!--    <Authors>mxwlf</Authors>-->
-<!--    <Company>mxwlf</Company>-->
-<!--    <Copyright>Copyright (c) mxwlf</Copyright>-->
-<!--    <RepositoryType>git</RepositoryType>-->
-<!--    <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>-->
-<!--    <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>-->
+    <PackageTags>dotnet;library;template</PackageTags>
+    <Authors>mxwlf</Authors>
+    <Company>mxwlf</Company>
+    <Copyright>Copyright (c) mxwlf</Copyright>
+    <Description>Example library shipped by dotnet-template, a baseline .NET repository template.</Description>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>
   </PropertyGroup>
 
   <!-- Enable artifacts output layout (https://learn.microsoft.com/en-us/dotnet/core/sdk/artifacts-output) -->

@@ -112,3 +112,12 @@ steps:
     inputs:
       targetPath: artifacts/sbom
       artifact: sbom
+
+  # The packages, as their own artifact for the same reason as in .github/workflows/ci.yml: they are
+  # the output, not a report. No condition, so this runs only on success — a run that failed before
+  # `pack` has nothing to publish, and PublishPipelineArtifact fails on a missing path.
+  - task: PublishPipelineArtifact@1
+    displayName: Publish packages
+    inputs:
+      targetPath: artifacts/package
+      artifact: package
