@@ -33,25 +33,29 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
-    <!-- Packaging. Every project inherits IsPackable; test projects opt out for themselves
-         (see the test csproj), which is why this can be set unconditionally here.
+    <!-- Shipping is opt-in. Nothing here is packable unless it says so, because "packable unless
+         you opt out" is the wrong default for a repository that will grow projects nobody intends
+         to publish — samples, benchmarks, integration-test hosts, internal tools. A project that
+         ships declares it for itself:
 
-         The metadata below is not optional decoration: $(TreatWarningsAsErrors) is on in Release,
-         and `dotnet pack` warns about missing Description, Authors and license, so an incomplete
-         block fails `make ci` rather than producing a shabby package.
+             <IsPackable>true</IsPackable>
 
-         PackageIcon stays commented out because it names a file that does not exist, and pack
-         fails outright (NU5046) on a declared icon it cannot find. Add package-icon.png and a
-         matching Pack item before enabling it. -->
-    <IsPackable>true</IsPackable>
+         and owns the metadata that describes *it* — Description, PackageTags, PackageReadmeFile —
+         together with a Pack item for every file it puts in the package. See
+         src/library.example/library.example.csproj for the worked example.
+
+         Do not guard anything on $(IsPackable) in THIS file. Directory.Build.props is imported
+         before the project body, so a condition here reads whatever default is in scope rather
+         than the project's own choice. Guards that depend on it belong in
+         Directory.Build.targets, which is imported afterwards.
+
+         The properties that remain below are facts about the repository rather than about any one
+         package, so they are shared: same license, same owner, same origin. -->
+    <IsPackable>false</IsPackable>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-<!--    <PackageIcon>package-icon.png</PackageIcon>-->
-    <PackageTags>dotnet;library;template</PackageTags>
     <Authors>mxwlf</Authors>
     <Company>mxwlf</Company>
     <Copyright>Copyright (c) mxwlf</Copyright>
-    <Description>Example library shipped by dotnet-template, a baseline .NET repository template.</Description>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>
     <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>
@@ -63,8 +67,9 @@
      <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
   </PropertyGroup>
 
+  <!-- EnablePackageValidation is NOT set here: it depends on $(IsPackable), which is not final until
+       the project body has been evaluated. It lives in Directory.Build.targets instead. -->
   <PropertyGroup>
-    <EnablePackageValidation Condition="'$(IsPackable)' == 'true'">true</EnablePackageValidation>
     <PackageValidationBaselineVersion Condition="'$(ApiCompatBaselineVersion)' != ''">$(ApiCompatBaselineVersion)</PackageValidationBaselineVersion>
     <ApiCompatSuppressionFile Condition="Exists('$(MSBuildThisFileDirectory)eng/versions/CompatibilitySuppressions.xml')">$(MSBuildThisFileDirectory)eng/versions/CompatibilitySuppressions.xml</ApiCompatSuppressionFile>
   </PropertyGroup>
