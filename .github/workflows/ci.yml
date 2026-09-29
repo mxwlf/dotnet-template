@@ -235,7 +235,12 @@ jobs:
       # Binds the SPDX document `make sbom` produced to the same subjects, so the dependency inventory
       # for a package is something a consumer can fetch and verify rather than take on trust. Both
       # files are named as subjects because the SBOM's own file inventory covers both.
-      - uses: actions/attest-sbom@v4
+      #
+      # actions/attest, not actions/attest-sbom: the latter is deprecated in favour of this unified
+      # action, which takes the same `sbom-path` input and derives the SPDX predicate type from the
+      # document itself. attest-build-provenance above is NOT deprecated and stays as it is —
+      # generating SLSA provenance through the generic action would mean hand-building the predicate.
+      - uses: actions/attest@v4
         with:
           subject-path: |
             package/**/*.nupkg

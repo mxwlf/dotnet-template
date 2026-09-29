@@ -100,7 +100,10 @@ jobs:
             artifacts/package/release/*.nupkg
             artifacts/package/release/*.snupkg
 
-      - uses: actions/attest-sbom@v4
+      # actions/attest, not actions/attest-sbom: the latter is deprecated in favour of this unified
+      # action, which takes the same `sbom-path` input and derives the SPDX predicate type from the
+      # document itself. attest-build-provenance above is NOT deprecated and stays as it is.
+      - uses: actions/attest@v4
         with:
           subject-path: |
             artifacts/package/release/*.nupkg
