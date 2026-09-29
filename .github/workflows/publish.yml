@@ -39,7 +39,12 @@ jobs:
     # message. Change both together or neither.
     environment: release
     permissions:
-      contents: read
+      # write, not read, solely so the last step can create a GitHub Release. Unlike the ci
+      # workflow — which runs on pull requests from anyone and is therefore held read-only — this
+      # job runs only on a tag, which requires push access to create. The untrusted-input problem
+      # that justified splitting ci's attest job into its own job does not apply here, so the
+      # extra permission is proportionate rather than worth another job and an artifact round-trip.
+      contents: write
       id-token: write # OIDC token for NuGet trusted publishing — NuGet/login 403s without it
       attestations: write # attest the artifact this run is about to push
 
@@ -127,3 +132,34 @@ jobs:
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
+
+      # LAST, deliberately: nothing here may stand between a built package and nuget.org. If this
+      # step fails the publish has already happened, so the worst case is a missing Release rather
+      # than a missing package. It is also why the release is not created before the push.
+      #
+      # The attached .nupkg is the artifact that was attested two steps above, byte for byte. That
+      # matters because the copy nuget.org serves is NOT verifiable: nuget.org adds its repository
+      # signature on upload, changing the archive and therefore the digest. So this Release is the
+      # only public place the attestations can actually be checked against.
+      #
+      # `gh` is preinstalled on the runner, so this needs no third-party action. Idempotent on
+      # purpose: a re-run uploads over the existing assets instead of failing with 422
+      # already_exists, which is the documented trap with release actions.
+      - name: Publish a GitHub Release with the attested packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          # A semver prerelease carries a hyphen (0.1.18-alpha); mark those so they do not show as
+          # the latest stable release.
+          case "$tag" in *-*) prerelease="--prerelease" ;; *) prerelease="" ;; esac
+
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag exists; replacing its assets."
+            gh release upload "$tag" artifacts/package/release/*.nupkg \
+                                     artifacts/package/release/*.snupkg --clobber
+          else
+            gh release create "$tag" artifacts/package/release/*.nupkg \
+                                     artifacts/package/release/*.snupkg \
+              --title "$tag" --generate-notes --verify-tag $prerelease
+          fi
