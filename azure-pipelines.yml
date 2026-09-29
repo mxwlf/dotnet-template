@@ -41,6 +41,13 @@ pool:
   vmImage: ubuntu-24.04
 
 steps:
+  # An explicit checkout, solely to set fetchDepth: 0. Versioning is derived from git history —
+  # Nerdbank.GitVersioning counts commits since version.json last changed its version field to produce
+  # the patch number — and the implicit checkout Azure would otherwise inject fetches shallowly, which
+  # leaves nothing to count. This is the counterpart of fetch-depth: 0 in .github/workflows/ci.yml.
+  - checkout: self
+    fetchDepth: 0
+
   # Interpreter used to build .venv. Any version >= 3.10 works (see MIN_PYTHON
   # in the Makefile); it is pinned here only for reproducible runs, not because
   # the hooks need this exact version.

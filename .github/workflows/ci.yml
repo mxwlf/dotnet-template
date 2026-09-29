@@ -51,7 +51,14 @@ jobs:
     # schedule instead of yours. Bump this deliberately.
     runs-on: ubuntu-24.04
     steps:
+      # fetch-depth: 0 because versioning is derived from git history. Nerdbank.GitVersioning counts
+      # the commits since version.json last changed its version field to produce the patch number, so
+      # it needs that history present. The action's default is a depth-1 shallow clone, which has no
+      # history to count — and this matters *because* version.json exists: before it did, no height
+      # was computed and a shallow clone was harmless.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # Interpreter used to build .venv. Any version >= 3.10 works (see
       # MIN_PYTHON in the Makefile); it is pinned here only for reproducible

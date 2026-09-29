@@ -36,9 +36,9 @@
 SOLUTION := dotnet-template.slnx
 CONFIGURATION ?= Release
 ARTIFACTS_DIR ?= artifacts
-BASELINE_REF ?=
-BASELINE_PACKAGE ?=
-VERSION ?=
+# Versioning is NOT a make variable: it is derived from git history by Nerdbank.GitVersioning,
+# configured in version.json. There is deliberately no VERSION override here — a version you
+# could pass on the command line would disagree with the one stamped into the assembly.
 
 # ---------------------------------------------------------------------------
 # REPO-LOCAL VIRTUALENV

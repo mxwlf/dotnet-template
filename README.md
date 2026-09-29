@@ -328,6 +328,88 @@ Locally, `make coverage` prints the same coverage figures to the terminal and
 leaves `artifacts/coverage/index.html` to open in a browser. The GitHub-specific
 output is inert off a runner, so one command behaves correctly in both places.
 
+### Versioning
+
+Versions are **derived from git**, not written by hand. There is no version string in
+any `.csproj`, and no `VERSION` variable to pass to make — a version you could
+override on the command line would disagree with the one stamped into the assembly.
+[Nerdbank.GitVersioning](https://github.com/dotnet/Nerdbank.GitVersioning) computes it
+from [`version.json`](version.json) plus the commit being built:
+
+```json
+{
+  "version": "0.1-alpha",
+  "publicReleaseRefSpec": [
+    "^refs/heads/main$",
+    "^refs/tags/v\\d+\\.\\d+"
+  ]
+}
+```
+
+Two fields do all the work.
+
+**`version`** is the major.minor you intend to ship, optionally with a prerelease tag.
+The patch number is *not* in the file: it is the **version height**, the number of
+commits since this field last changed. So `0.1-alpha` yields `0.1.1-alpha`,
+`0.1.2-alpha`, `0.1.3-alpha` … one per commit, automatically ordered, with no bump
+commits. Raising the field to `0.2` resets the height, and the next build is `0.2.1`.
+Dropping `-alpha` is what declares the API stable.
+
+**`publicReleaseRefSpec`** decides which refs produce clean versions. A build of a ref
+that matches is a *public release* and is versioned plainly; anything else gets a
+`-g<commit>` suffix so it can never be mistaken for a release:
+
+| Building | Version |
+| --- | --- |
+| `main` | `0.1.4-alpha` |
+| a `v0.1`-style tag | `0.1.4-alpha` |
+| a feature branch or PR | `0.1.4-alpha-g1a2b3c4d5e` |
+
+The same computation feeds several places at once, which is why nothing has to be kept
+in sync by hand:
+
+| Consumer | Value |
+| --- | --- |
+| `AssemblyVersion` | `0.1.0.0` — major.minor only, so a patch never breaks binding |
+| `FileVersion` | `0.1.4.<revision>` |
+| `AssemblyInformationalVersion` | `0.1.4-alpha+<commit>` — carries the exact commit |
+| The `.nupkg` / `.snupkg` filename | `library.example.0.1.4-alpha.nupkg` |
+| The SBOM's document subject | `dotnet-template 0.1.4-alpha` |
+
+`nbgv` is wired in twice for this: as a `PackageReference` in
+[`Directory.Build.props`](Directory.Build.props) that stamps the assembly during the
+build, and as a pinned tool in
+[`.config/dotnet-tools.json`](.config/dotnet-tools.json) that `make sbom` queries for
+the document subject. Inspect what a commit will produce with:
+
+```sh
+dotnet nbgv get-version
+```
+
+> **CI must clone with full history.** The patch number is a *count of commits*, so a
+> shallow clone has nothing to count. Both stubs therefore set it explicitly —
+> `fetch-depth: 0` on `actions/checkout`, and an explicit `checkout: self` with
+> `fetchDepth: 0` on Azure, which exists only for that reason. This is a dependency of
+> `version.json`: before that file existed no height was computed, and the default
+> shallow clone was harmless.
+
+One consequence worth knowing: because `AssemblyVersion` is deliberately truncated to
+`major.minor`, every patch in a minor series is binding-compatible, and the precise
+build is identified by `AssemblyInformationalVersion` instead. That is the intended
+trade, not an oversight.
+
+Two things versioning currently blocks, both waiting on a first published release:
+
+- **Baseline API-compatibility validation.** `EnablePackageValidation` is on for
+  packable projects, but `PackageValidationBaselineVersion` is conditioned on
+  `ApiCompatBaselineVersion`, which is unset — so validation checks a package's
+  internal consistency and not whether it broke a previously shipped API. Set that
+  property to a released version to engage it. `microsoft.dotnet.apicompat.tool` is
+  pinned and waiting.
+- **Publishing.** Nothing in this repository pushes packages anywhere; they are built
+  and retained as CI artifacts only. Versions are now ordered and publishable, which
+  is the prerequisite, but where they go is left to the project.
+
 ### Packaging is opt-in
 
 `make pack` writes `.nupkg` and `.snupkg` files into
@@ -455,6 +537,7 @@ Bump these versions deliberately when you want to upgrade.
 | `make pack` | Produce the NuGet packages (`.nupkg` + `.snupkg`) into `artifacts/package/`. Part of `make ci`. |
 | `make sbom` | Generate an SPDX 2.2 SBOM for those packages into `artifacts/sbom/`. Part of `make ci`. |
 | `make tools` | Restore the pinned local .NET tools from `.config/dotnet-tools.json`. |
+| — | Versions come from [`version.json`](version.json) + git history; there is no version make variable. See [Versioning](#versioning). |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
 | `make rulesets-apply` | Create/update this repo's GitHub ruleset from `.github/rulesets/`. Needs `gh`. |
