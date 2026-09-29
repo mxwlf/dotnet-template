@@ -14,7 +14,7 @@
 #   https://www.nuget.org/account/trustedpublishing
 #
 # The one secret still needed is NUGET_USER, the nuget.org *username* (not the email address),
-# scoped to the `release` environment rather than the repository.
+# scoped to the `production` environment rather than the repository.
 name: publish
 
 on:
@@ -33,7 +33,11 @@ jobs:
     runs-on: ubuntu-24.04
     # Scopes NUGET_USER to this environment and gives somewhere to hang an approval gate. The
     # nuget.org policy must name this environment too, or the token exchange is rejected.
-    environment: release
+    # MUST match the Environment field on the nuget.org trusted publishing policy. nuget.org
+    # validates the environment claim in the OIDC token whenever the policy names one, so a
+    # mismatch here is refused at the token exchange — not at push time, and not with an obvious
+    # message. Change both together or neither.
+    environment: production
     permissions:
       contents: read
       id-token: write # OIDC token for NuGet trusted publishing — NuGet/login 403s without it
