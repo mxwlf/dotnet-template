@@ -474,9 +474,15 @@ a package is only produced by an explicit tag, never by a merge.
 **Before the first publish**, three things must be set up outside the repository:
 
 1. **A `PackageId` you are willing to live with.** NuGet package ids can never be renamed,
-   deleted or reused — only unlisted. The template's placeholder is `library.example`, and
-   `publish.yml` contains a step that **fails the build** while that is still the id, so a tag
-   pushed too early cannot claim it. Delete that step once you have chosen.
+   deleted or reused — only unlisted. This repository publishes
+   **`mxwlf.net.library.example`**, set explicitly in
+   [`library.example.csproj`](src/library.example/library.example.csproj) rather than defaulting
+   to the assembly name.
+
+   **If you are building on this template, change it before your first tag.** That id sits under
+   a reserved prefix belonging to the template's author, so nuget.org would reject it from
+   anywhere else — `publish.yml` fails early with an explanation rather than letting you discover
+   that at push time.
 2. **A trusted publishing policy** at
    [nuget.org/account/trustedpublishing](https://www.nuget.org/account/trustedpublishing):
 
@@ -517,6 +523,34 @@ makes a re-run idempotent, and the `.snupkg` is pushed automatically alongside t
 
 Run `make pack` locally and inspect the `.nupkg` before your first tag. A wasted version number
 cannot be reclaimed.
+
+#### ID prefix reservation
+
+This repository's package id sits under the reserved prefix **`mxwlf.*`**. A
+[reservation](https://learn.microsoft.com/en-us/nuget/nuget-org/id-prefix-reservation) does two
+things: packages matching it show the "reserved prefix" indicator on nuget.org and in Visual
+Studio, and — more usefully — **nuget.org rejects any matching id submitted by anyone else**. It
+is the mechanism that keeps someone from publishing a convincing lookalike.
+
+It is not self-service. Email **account@nuget.org** with your nuget.org owner display name and
+the prefixes you want. The
+[criteria](https://learn.microsoft.com/en-us/nuget/nuget-org/id-prefix-reservation#id-prefix-reservation-criteria)
+the NuGet team weighs are whether the prefix clearly identifies its owner, whether it is too
+common or generic to belong to one owner (prefixes shorter than four characters are discouraged),
+and whether leaving it unreserved would cause confusion. Existing published packages are not a
+stated requirement, though identity questions may follow.
+
+Two things in this repository exist partly to satisfy the associated
+[publishing best practices](https://learn.microsoft.com/en-us/nuget/nuget-org/id-prefix-reservation#id-prefix-reservation-criteria):
+
+- **`$(Authors)` is `mxwlf`, matching the prefix.** The guidance asks for identifying properties
+  that are clear and consistent, *especially the package author*, so the author and the prefix
+  agreeing is the point — this is why `$(Authors)` is the publishing handle while `$(Copyright)`
+  carries the legal name.
+- **The licence is declared with the `license` element, not `licenseUrl`.**
+  `PackageLicenseExpression` produces `<license type="expression">MIT</license>`; the `licenseUrl`
+  that also appears in the nuspec is NuGet's own back-compatibility shim, not something this
+  repository sets.
 
 ### Attestations
 

@@ -321,7 +321,7 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
-      "library.example": {
+      "mxwlf.net.library.example": {
         "type": "Project",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "[10.0.12, )"

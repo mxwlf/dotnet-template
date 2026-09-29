@@ -65,17 +65,20 @@ jobs:
             exit 1
           fi
 
-      # A NuGet package id can never be renamed, deleted or reused — only unlisted. This refuses
-      # to publish while the id is still the template's placeholder, so an implementor who tags
-      # before choosing their own id gets a failed build instead of permanently claiming
-      # `library.example` on nuget.org. Delete this step once you have set a real PackageId.
-      - name: Refuse to publish a placeholder package id
+      # A NuGet package id can never be renamed, deleted or reused — only unlisted. This repository's
+      # id sits under the reserved `mxwlf.*` prefix, so a copy of this template that tags without
+      # changing it would be rejected by nuget.org for publishing into someone else's reserved
+      # namespace. That rejection arrives late and reads cryptically, so fail here instead with an
+      # explanation. The check is exact on both id and repository, so it cannot false-positive on a
+      # legitimately different id.
+      - name: Refuse to publish this template's own package id from a fork
         run: |
           id="$(dotnet msbuild src/library.example/library.example.csproj -getProperty:PackageId)"
-          echo "PackageId=$id"
-          if [ "$id" = "library.example" ]; then
-            echo "::error::PackageId is still the template placeholder 'library.example'. Set a real"
-            echo "::error::PackageId before publishing — NuGet ids are permanent and cannot be undone."
+          echo "PackageId=$id  repository=$GITHUB_REPOSITORY"
+          if [ "$id" = "mxwlf.net.library.example" ] && [ "$GITHUB_REPOSITORY" != "mxwlf/dotnet-template" ]; then
+            echo "::error::PackageId is still '$id', which belongs to the dotnet-template author and"
+            echo "::error::sits under the reserved prefix 'mxwlf.*'. Set your own PackageId before"
+            echo "::error::tagging — NuGet ids are permanent and cannot be renamed or deleted."
             exit 1
           fi
 

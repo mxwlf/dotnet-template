@@ -12,6 +12,15 @@
        intended nudge rather than an inconvenience. -->
   <PropertyGroup>
     <IsPackable>true</IsPackable>
+    <!-- Set explicitly rather than defaulting to $(AssemblyName): the assembly is `library.example`,
+         which as a package id would be both meaningless and unreserved. This id sits under the
+         `mxwlf.*` reserved prefix, which is what stops anyone else publishing something that looks
+         like it came from here.
+
+         A NuGet package id can never be renamed, deleted or reused — only unlisted. Change this
+         before your first tag if you are building on this template; publish.yml refuses to publish
+         while it still names this template's own id from a different repository. -->
+    <PackageId>mxwlf.net.library.example</PackageId>
     <Description>Example library shipped by dotnet-template, a baseline .NET repository template.</Description>
     <PackageTags>dotnet;library;template</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
