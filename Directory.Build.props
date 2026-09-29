@@ -55,7 +55,11 @@
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <Authors>mxwlf</Authors>
     <Company>mxwlf</Company>
-    <Copyright>Copyright (c) mxwlf</Copyright>
+    <!-- The copyright notice is a legal assertion, so it names the copyright holder and matches
+         LICENSE verbatim. $(Authors) and $(Company) above stay as the publishing handle: they are
+         display metadata on nuget.org, and they line up with the GitHub account the repository and
+         project URLs point at. -->
+    <Copyright>Copyright (c) 2026 Edgar Adrian Padilla Vega</Copyright>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>
     <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>
