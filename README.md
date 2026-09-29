@@ -633,3 +633,13 @@ Override the interpreter for any of these with `PYTHON=...`, e.g.
 - **Hook is ignored / not running** — confirm `make setup` has been run
   (`git config --get include.path` should print `../.gitconfig`) and that the
   hook scripts in `.githooks/` are executable.
+
+## License
+
+[MIT](LICENSE).
+
+The packages declare it with `PackageLicenseExpression` in
+[`Directory.Build.props`](Directory.Build.props), which embeds the SPDX identifier and a
+`licenseUrl` in the nuspec. That is why the `LICENSE` file itself is not packed: an
+expression is self-describing, and `PackageLicenseFile` is only needed for a licence NuGet
+cannot name.
