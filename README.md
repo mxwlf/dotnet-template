@@ -460,6 +460,71 @@ about any one package: license, authors, copyright, repository and project URLs.
 does not exist, and unlike a missing description, pack *fails* (NU5046) on a declared
 icon it cannot find. Add the file and a matching `Pack` item before enabling it.
 
+### Attestations
+
+Every push to `main` records two [artifact
+attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds)
+against the packages it produced:
+
+- **Build provenance** — a Sigstore-backed statement that this artifact digest was built by this
+  workflow, from this commit, on this runner.
+- **SBOM** — binds the SPDX document `make sbom` produced to the same artifacts, so the dependency
+  inventory is something a consumer can verify rather than take on trust.
+
+Verify either one with the GitHub CLI, against a package downloaded from anywhere —
+including nuget.org:
+
+```sh
+gh attestation verify library.example.0.1.3-alpha.nupkg --repo mxwlf/dotnet-template
+```
+
+> **The digest is the whole point, and it is easy to invalidate.** An attestation is a
+> claim about exact bytes. The `attest` job therefore downloads the artifact the build
+> already uploaded rather than re-packing, and **a publish step must push that same
+> file.** A release that runs its own `dotnet pack` produces a different digest, and
+> every attestation silently stops applying to the thing people actually install.
+
+What attestations are *not*: a NuGet signature. NuGet clients do not read them, and they
+do not make a package show as author-signed. nuget.org applies its own **repository**
+signature to everything on upload, independently. An **author** signature is a separate
+mechanism needing a code-signing certificate — see
+[Code signing](#code-signing-what-is-and-is-not-covered).
+
+Two implementation notes, both deliberate:
+
+- **The attestations live in their own job.** They need `id-token: write` and
+  `attestations: write`; the build job is held at `contents: read` and runs on every pull
+  request, including untrusted ones. Splitting them keeps the build at least privilege
+  and grants the elevated token only to a job that runs afterwards and does nothing but
+  make claims about what the build already produced.
+- **Only pushes to `main` are attested.** An attestation is a permanent public record
+  about a digest; pull-request builds produce packages nobody can install, so attesting
+  them would assert things about artifacts that exist nowhere. Release tags should be
+  added to that condition when a release workflow exists.
+
+### Code signing: what is and is not covered
+
+| | Status |
+| --- | --- |
+| Commit and tag signing | **In use** — commits are GPG-signed and GitHub-verified, and `main` requires it (`required_signatures`) |
+| Build provenance attestation | **In use** — see above |
+| SBOM attestation | **In use** — see above |
+| nuget.org repository signature | **Automatic** on upload, nothing to configure |
+| NuGet **author** signature | **Not configured** — needs a code-signing certificate |
+| Authenticode on the assemblies | **Not configured** — needs a code-signing certificate |
+| Strong naming (`SignAssembly`) | **Not configured, and deliberately so.** It is an assembly *identity* mechanism, not a security one, and the key cannot be kept secret in a public repository. Add it only if a consumer requires it |
+
+The two certificate-based rows are unconfigured because a certificate is the hard part:
+since the CA/Browser Forum baseline changed in June 2023, code-signing private keys must
+live on FIPS 140-2 Level 2+ hardware, so there is no `.pfx` to drop into a CI secret. The
+realistic routes are a managed service (Azure Trusted Signing), a free OSS programme
+(SignPath Foundation, which requires a clear OSS license), or a commercial certificate
+with your own token or cloud HSM.
+
+If you add author signing, it belongs in the release workflow rather than `make ci` —
+`make ci` must run identically on a laptop with no secrets — and the signature should be
+timestamped, or it stops verifying once the certificate expires.
+
 ### The SBOM
 
 `make sbom` writes an SPDX 2.2 document to
