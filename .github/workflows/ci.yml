@@ -188,9 +188,14 @@ jobs:
   # These are GitHub's Sigstore-backed artifact attestations: cryptographic statements that a specific
   # artifact digest was built by this workflow, from this commit, on this runner — and, separately,
   # that a given SBOM describes it. They are not a NuGet signature: NuGet clients do not read them, and
-  # nuget.org's own repository signature is applied on upload regardless. Verification is out of band:
+  # nuget.org's own repository signature is applied on upload regardless. Verification is out of band,
+  # against the artifact AS BUILT — the `package` artifact on this run:
   #
-  #     gh attestation verify library.example.0.1.3-alpha.nupkg --repo mxwlf/dotnet-template
+  #     gh attestation verify mxwlf.net.library.example.0.1.18-alpha.nupkg --repo mxwlf/dotnet-template
+  #
+  # A copy fetched from nuget.org will NOT verify. The repository signature adds a .signature.p7s entry
+  # to the archive, which changes the digest an attestation binds. That is inherent, not fixable here:
+  # these attest what this repository built, up to the moment of upload.
   #
   # WHY A SEPARATE JOB: attestations need `id-token: write` and `attestations: write`. The ci job above
   # is deliberately held at `contents: read`, and it runs on every pull request. Splitting keeps the
@@ -211,9 +216,11 @@ jobs:
       attestations: write # record the attestation against this repository
     steps:
       # The artifacts the ci job uploaded, deliberately NOT a rebuild. An attestation binds a digest,
-      # so it must describe the exact bytes that will be published. Rebuilding here would attest an
-      # artifact nobody ships — and the same rule governs publishing: the release step has to push
-      # THIS file, not a fresh `dotnet pack`, or the attestation will not match what is on nuget.org.
+      # so it must describe the exact bytes that get submitted. Rebuilding here would attest an artifact
+      # nobody ships — and the same rule governs publishing: the release step pushes THIS file, not a
+      # fresh `dotnet pack`, so the chain from commit to upload stays unbroken. Note that nuget.org
+      # re-signs on upload, so the copy it serves has a different digest either way; keeping this hop
+      # honest is still what makes the attestation mean anything.
       - uses: actions/download-artifact@v8
         with:
           name: package

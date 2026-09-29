@@ -618,12 +618,29 @@ against the packages it produced:
 - **SBOM** — binds the SPDX document `make sbom` produced to the same artifacts, so the dependency
   inventory is something a consumer can verify rather than take on trust.
 
-Verify either one with the GitHub CLI, against a package downloaded from anywhere —
-including nuget.org:
+Verify either one with the GitHub CLI, against the `.nupkg` **as the build produced it** — the
+`package` artifact on the run, or the file `make pack` leaves in `artifacts/package/`:
 
 ```sh
-gh attestation verify library.example.0.1.3-alpha.nupkg --repo mxwlf/dotnet-template
+gh attestation verify mxwlf.net.library.example.0.1.18-alpha.nupkg --repo mxwlf/dotnet-template
+gh attestation verify … --predicate-type https://spdx.dev/Document      # the SBOM one
 ```
+
+> **A package downloaded from nuget.org will NOT verify, and that is not a fault.** nuget.org
+> applies its own **repository signature** on upload, which adds a `.signature.p7s` entry to the
+> archive — for this package, 8,690 bytes became 21,766. An attestation binds a *digest*, so
+> rewriting the archive breaks the match by design. Measured, not assumed: `gh attestation verify`
+> exits 0 against the built artifact and 1 against the same version fetched from nuget.org.
+>
+> So these attestations are evidence about **what this repository built**, verifiable up to the
+> moment of upload. They are not a signal a consumer can check against the copy the registry
+> serves. For that, the in-ecosystem mechanisms are nuget.org's repository signature — automatic,
+> and the reason the bytes differ — and an author signature, which needs a certificate. See
+> [Code signing](#code-signing-what-is-and-is-not-covered).
+>
+> The rule that pack, attest and push stay in one run still holds: it keeps the attested artifact
+> identical to the one *submitted*, so the chain from commit to upload is unbroken. Only the final
+> server-side signing hop is outside it.
 
 > **The digest is the whole point, and it is easy to invalidate.** An attestation is a
 > claim about exact bytes. The `attest` job therefore downloads the artifact the build
