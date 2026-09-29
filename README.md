@@ -642,6 +642,26 @@ gh attestation verify … --predicate-type https://spdx.dev/Document      # the 
 > identical to the one *submitted*, so the chain from commit to upload is unbroken. Only the final
 > server-side signing hop is outside it.
 
+Because of that, `publish.yml` also creates a **GitHub Release** for the tag and attaches the
+`.nupkg` and `.snupkg` *as built*. Those assets are byte-identical to what was attested, which
+makes the Release the one public place the attestations can be checked:
+
+```sh
+gh release download v0.1.18-alpha --pattern '*.nupkg'
+gh attestation verify mxwlf.net.library.example.0.1.18-alpha.nupkg --repo mxwlf/dotnet-template
+```
+
+The release step runs **last**, after the push. Nothing may stand between a built package and
+nuget.org, so if creating the Release fails the worst case is a missing Release rather than a
+missing package. It is idempotent — a re-run replaces the assets rather than failing with HTTP 422
+`already_exists`, the documented trap with release actions — and it marks tags containing a hyphen
+(`0.1.18-alpha`) as prereleases so they do not display as the latest stable version.
+
+This is also why the publish job holds `contents: write` while the CI workflow stays
+`contents: read`: creating a Release requires it, and this job only ever runs on a tag, which
+already requires push access. The untrusted-input concern that justified giving CI's attestation
+step its own job does not apply here.
+
 > **The digest is the whole point, and it is easy to invalidate.** An attestation is a
 > claim about exact bytes. The `attest` job therefore downloads the artifact the build
 > already uploaded rather than re-packing, and **a publish step must push that same
