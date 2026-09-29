@@ -41,6 +41,10 @@ on:
 # to stdout and to $GITHUB_STEP_SUMMARY, not API calls — and actions/cache is likewise unaffected.
 # Stating this closes the CodeQL actions/missing-workflow-permissions finding, which fires on the
 # default token being left at whatever the repository hands out.
+#
+# This is the DEFAULT for every job, which is what keeps the build — the job that runs on untrusted
+# pull requests — read-only. The attest job at the bottom of this file needs more than that, so it
+# widens its own permissions block rather than this one being loosened for everybody.
 permissions:
   contents: read
 
@@ -177,3 +181,63 @@ jobs:
         with:
           path: artifacts/test-history
           key: gh-test-history-${{ runner.os }}-${{ github.run_id }}
+
+  # -------------------------------------------------------------------------------------------------
+  # Provenance and SBOM attestations for the packages.
+  # -------------------------------------------------------------------------------------------------
+  # These are GitHub's Sigstore-backed artifact attestations: cryptographic statements that a specific
+  # artifact digest was built by this workflow, from this commit, on this runner — and, separately,
+  # that a given SBOM describes it. They are not a NuGet signature: NuGet clients do not read them, and
+  # nuget.org's own repository signature is applied on upload regardless. Verification is out of band:
+  #
+  #     gh attestation verify library.example.0.1.3-alpha.nupkg --repo mxwlf/dotnet-template
+  #
+  # WHY A SEPARATE JOB: attestations need `id-token: write` and `attestations: write`. The ci job above
+  # is deliberately held at `contents: read`, and it runs on every pull request. Splitting keeps the
+  # build itself at least privilege and grants the elevated token only to a job that runs afterwards,
+  # on a trusted ref, and does nothing but make claims about what the build already produced.
+  #
+  # WHY ONLY ON A PUSH TO MAIN: an attestation is a permanent public record about an artifact digest.
+  # Pull-request builds produce packages nobody can install, so attesting them would fill the log with
+  # claims about artifacts that do not exist anywhere. Add `refs/tags/v*` to the condition when the
+  # release workflow lands.
+  attest:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # mint the OIDC token that identifies this workflow to Sigstore
+      attestations: write # record the attestation against this repository
+    steps:
+      # The artifacts the ci job uploaded, deliberately NOT a rebuild. An attestation binds a digest,
+      # so it must describe the exact bytes that will be published. Rebuilding here would attest an
+      # artifact nobody ships — and the same rule governs publishing: the release step has to push
+      # THIS file, not a fresh `dotnet pack`, or the attestation will not match what is on nuget.org.
+      - uses: actions/download-artifact@v8
+        with:
+          name: package
+          path: package
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ci-reports
+          path: reports
+
+      # SLSA build provenance. The .snupkg is attested alongside the .nupkg because it is equally a
+      # build output that someone may fetch and want to trace back to a commit.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            package/**/*.nupkg
+            package/**/*.snupkg
+
+      # Binds the SPDX document `make sbom` produced to the same subjects, so the dependency inventory
+      # for a package is something a consumer can fetch and verify rather than take on trust. Both
+      # files are named as subjects because the SBOM's own file inventory covers both.
+      - uses: actions/attest-sbom@v4
+        with:
+          subject-path: |
+            package/**/*.nupkg
+            package/**/*.snupkg
+          sbom-path: reports/sbom/_manifest/spdx_2.2/manifest.spdx.json
