@@ -483,8 +483,8 @@ a package is only produced by an explicit tag, never by a merge.
    a reserved prefix belonging to the template's author, so nuget.org would reject it from
    anywhere else — `publish.yml` fails early with an explanation rather than letting you discover
    that at push time.
-2. **A trusted publishing policy** at
-   [nuget.org/account/trustedpublishing](https://www.nuget.org/account/trustedpublishing):
+2. **A trusted publishing policy**, created on nuget.org under your **username → Trusted
+   Publishing** ([direct link](https://www.nuget.org/account/trustedpublishing)):
 
    | Field | Value |
    | --- | --- |
@@ -495,9 +495,17 @@ a package is only produced by an explicit tag, never by a merge.
 
    The workflow filename is part of the policy, so renaming `publish.yml` breaks publishing
    with *"no matching policy"* until the policy is updated. It is the filename that matters,
-   not the workflow's `name:` field. On a private repository the policy is "temporarily active"
-   for 7 days and becomes permanent after the first successful publish; on a public one it is
-   permanent immediately.
+   not the workflow's `name:` field.
+
+   A policy may start out **"temporarily active" for 7 days** — the docs say this usually
+   happens with private repositories, but do not promise public ones skip it. The reason is
+   that nuget.org needs GitHub's numeric repository and owner **ids** to pin the policy against
+   resurrection attacks (deleting a repo and recreating it under the same name), and it only
+   receives those from a successful publish. So if you see that status, publish within the
+   window; it can be restarted at any time, even after lapsing.
+
+   See [Publishing from several repositories](#publishing-from-several-repositories) for how
+   this scales, and why you should not leave the package scope at its default.
 
 3. **A `release` GitHub Environment** — Settings → Environments → New environment → `release`,
    with an environment secret `NUGET_USER` holding your nuget.org **username, not your email**.
@@ -523,6 +531,48 @@ makes a re-run idempotent, and the `.snupkg` is pushed automatically alongside t
 
 Run `make pack` locally and inspect the `.nupkg` before your first tag. A wasted version number
 cannot be reclaimed.
+
+#### Publishing from several repositories
+
+Policies scope on two independent axes, and only one of them takes a pattern.
+
+**Repository: no wildcards.** A policy matches exactly one `Repository Owner` + `Repository` +
+`Workflow File` (+ `Environment`). So *one policy per repository* — standing up a second
+publishing repo means adding a second policy, not editing the first.
+
+Because every repository built from this template ships the same `publish.yml`, only the
+`Repository` field differs between them:
+
+| Owner | Repository | Workflow File | Environment | Package scope |
+| --- | --- | --- | --- | --- |
+| `you` | `first-lib` | `publish.yml` | `release` | `You.First*` |
+| `you` | `second-lib` | `publish.yml` | `release` | `You.Second*` |
+
+That consistency is convenient — one less thing varying per repo — and it is also why renaming
+`publish.yml` in any one of them quietly breaks that repo alone.
+
+**Packages: globs, and action scopes.** A policy is owned by a user or an organisation, and by
+default *applies to every package that owner owns*. Its **Scopes** narrow this: a glob pattern
+selecting which package ids the policy covers, and which actions it permits — publishing new
+packages, versus new versions of existing ones.
+
+Two things follow, and both are worth doing:
+
+- **Set the package glob.** Left at its default, each repository's policy can publish anything
+  you own, so a mistake or compromise in one repo reaches unrelated packages. Narrowing each
+  policy to the ids that repository actually owns costs nothing and contains the blast radius.
+- **Drop the "new packages" scope once a repository has published.** An
+  [ID prefix reservation](#id-prefix-reservation) stops *other people* creating ids under your
+  prefix; it does not stop your own over-broad policy from creating them. After the first
+  publish that permission is no longer needed.
+
+The two mechanisms sit at different levels, which is what makes this manageable: a **prefix
+reservation is per nuget.org owner** and covers every package from every repository — you apply
+for it once — while **policies are per repository** and are the recurring step.
+
+If you later move nuget.org ownership to an organisation, both the reservation and the policies
+need to belong to that organisation. Note that an organisation-owned policy goes **inactive** if
+the member who created it leaves the org, and becomes active again when they are re-added.
 
 #### ID prefix reservation
 
