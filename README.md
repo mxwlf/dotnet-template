@@ -491,7 +491,7 @@ a package is only produced by an explicit tag, never by a merge.
    | Repository Owner | your GitHub account or organisation |
    | Repository | this repository's name |
    | Workflow File | `publish.yml` — the **exact filename**, no path, case-insensitive |
-   | Environment | `production` — must equal the job's `environment:` in `publish.yml` |
+   | Environment | `release` — must equal the job's `environment:` in `publish.yml` |
 
    The workflow filename is part of the policy, so renaming `publish.yml` breaks publishing
    with *"no matching policy"* until the policy is updated. It is the filename that matters,
@@ -508,13 +508,13 @@ a package is only produced by an explicit tag, never by a merge.
    this scales, and why you should not leave the package scope at its default.
 
 3. **A matching GitHub Environment** — Settings → Environments → New environment. This
-   repository uses `production`, because that is what its nuget.org policy names. Add an
+   repository uses `release`, because that is what its nuget.org policy names. Add an
    environment secret `NUGET_USER` holding your nuget.org **username (profile name), not your
    email address**. Add required reviewers there if you want an approval gate on every publish.
 
    The name is load-bearing on both sides: nuget.org validates the environment claim in the
-   OIDC token whenever the policy names one, so a policy saying `production` and a workflow
-   saying `release` is refused at the token exchange — before the push, and without an obvious
+   OIDC token whenever the policy names one, so a policy and a workflow naming different
+   environments are refused at the token exchange — before the push, and without an obvious
    message. Pick one name and use it in the policy, the workflow and the environment.
 
 Then releasing is a tag:
@@ -550,8 +550,8 @@ Because every repository built from this template ships the same `publish.yml`, 
 
 | Owner | Repository | Workflow File | Environment | Package scope |
 | --- | --- | --- | --- | --- |
-| `you` | `first-lib` | `publish.yml` | `production` | `You.First*` |
-| `you` | `second-lib` | `publish.yml` | `production` | `You.Second*` |
+| `you` | `first-lib` | `publish.yml` | `release` | `You.First*` |
+| `you` | `second-lib` | `publish.yml` | `release` | `You.Second*` |
 
 That consistency is convenient — one less thing varying per repo — and it is also why renaming
 `publish.yml` in any one of them quietly breaks that repo alone.
