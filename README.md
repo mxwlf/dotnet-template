@@ -460,6 +460,64 @@ about any one package: license, authors, copyright, repository and project URLs.
 does not exist, and unlike a missing description, pack *fails* (NU5046) on a declared
 icon it cannot find. Add the file and a matching `Pack` item before enabling it.
 
+### Publishing to nuget.org
+
+[`.github/workflows/publish.yml`](.github/workflows/publish.yml) publishes on a version tag,
+using [trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)
+(OIDC) rather than a long-lived API key: `NuGet/login` exchanges the workflow's own identity
+for a token valid about an hour, so there is no `NUGET_API_KEY` to rotate or leak.
+
+It is a separate workflow from CI on purpose. Publishing needs `id-token: write`, and nothing
+that runs on untrusted pull-request input should ever hold that; keeping them apart also means
+a package is only produced by an explicit tag, never by a merge.
+
+**Before the first publish**, three things must be set up outside the repository:
+
+1. **A `PackageId` you are willing to live with.** NuGet package ids can never be renamed,
+   deleted or reused — only unlisted. The template's placeholder is `library.example`, and
+   `publish.yml` contains a step that **fails the build** while that is still the id, so a tag
+   pushed too early cannot claim it. Delete that step once you have chosen.
+2. **A trusted publishing policy** at
+   [nuget.org/account/trustedpublishing](https://www.nuget.org/account/trustedpublishing):
+
+   | Field | Value |
+   | --- | --- |
+   | Repository Owner | your GitHub account or organisation |
+   | Repository | this repository's name |
+   | Workflow File | `publish.yml` — the **exact filename**, no path, case-insensitive |
+   | Environment | `release` |
+
+   The workflow filename is part of the policy, so renaming `publish.yml` breaks publishing
+   with *"no matching policy"* until the policy is updated. It is the filename that matters,
+   not the workflow's `name:` field. On a private repository the policy is "temporarily active"
+   for 7 days and becomes permanent after the first successful publish; on a public one it is
+   permanent immediately.
+
+3. **A `release` GitHub Environment** — Settings → Environments → New environment → `release`,
+   with an environment secret `NUGET_USER` holding your nuget.org **username, not your email**.
+   Add required reviewers there if you want an approval gate on every publish. The environment
+   name must match what the nuget.org policy says, or the token exchange is refused.
+
+Then releasing is a tag:
+
+```sh
+git tag v0.1.4-alpha
+git push origin v0.1.4-alpha
+```
+
+The workflow verifies the tag matches the version nbgv computes, runs `make ci` so nothing is
+published that would not pass a merge gate, attests the packages, and pushes. `--skip-duplicate`
+makes a re-run idempotent, and the `.snupkg` is pushed automatically alongside the `.nupkg`.
+
+> **Attestations are generated in this workflow, against the artifact it is about to push.**
+> An attestation binds a *digest*, so it has to be produced from the exact bytes that reach
+> nuget.org. Re-packing after attesting, or pushing a different run's output, leaves claims that
+> silently do not describe the package anyone installs. If you restructure this workflow, keep
+> pack → attest → push in one run.
+
+Run `make pack` locally and inspect the `.nupkg` before your first tag. A wasted version number
+cannot be reclaimed.
+
 ### Attestations
 
 Every push to `main` records two [artifact
