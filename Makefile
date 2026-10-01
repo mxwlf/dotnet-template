@@ -347,6 +347,20 @@ PACKAGE_DIR ?= $(ARTIFACTS_DIR)/package/$(TEST_CONFIG_DIR)
 # Directory.Build.targets. Test projects set IsPackable=false themselves, so nothing here has to
 # exclude them.
 pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
+	@# Emptied first so $(PACKAGE_DIR) holds exactly what THIS run produced. Without it the
+	@# directory accumulates every version ever packed locally, and the consumers of that
+	@# directory are globs: publish.yml pushes `$(PACKAGE_DIR)/*.nupkg` and attests the same
+	@# pattern, so a stale package would be published and attested alongside the intended one.
+	@# CI never saw this because a runner starts clean; a laptop does not.
+	@#
+	@# Only this configuration's directory is removed, so packing Debug does not discard a
+	@# Release package. The guard refuses an empty or absolute path: $(PACKAGE_DIR) is composed
+	@# from $(ARTIFACTS_DIR) and $(CONFIGURATION), and an `rm -rf` built from overridable
+	@# variables should not be able to point at /.
+	@case '$(PACKAGE_DIR)' in \
+		''|/*) echo 'make: refusing to clean PACKAGE_DIR=$(PACKAGE_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
+	esac
+	@rm -rf "$(PACKAGE_DIR)"
 	dotnet pack --no-build --configuration $(CONFIGURATION)
 	@ls -1 "$(PACKAGE_DIR)" 2> /dev/null | sed 's/^/make: packed /' || \
 		{ echo 'make: pack produced nothing in $(PACKAGE_DIR).' 1>&2; exit 1; }
