@@ -458,6 +458,14 @@ Two things versioning currently blocks, both waiting on a first published releas
 package — bad metadata, a missing readme, a package-validation failure — fails the
 build rather than being discovered at publish time.
 
+That directory is **emptied first**, so it always holds exactly what the last run produced.
+This is not tidiness: everything downstream of it is a glob. `publish.yml` pushes
+`artifacts/package/release/*.nupkg` and attests the same pattern, so a version left over from
+an earlier local pack would be published and attested alongside the intended one. CI never
+hits this because a runner starts clean; a laptop accumulates. Only the current
+configuration's directory is cleared, so packing `Debug` does not discard a `Release`
+package.
+
 **Nothing is packable unless the project says so.** `Directory.Build.props` sets
 `IsPackable=false` for the whole repository, and a project that ships opts in and
 describes itself:
