@@ -328,6 +328,47 @@ Locally, `make coverage` prints the same coverage figures to the terminal and
 leaves `artifacts/coverage/index.html` to open in a browser. The GitHub-specific
 output is inert off a runner, so one command behaves correctly in both places.
 
+### Target frameworks
+
+One property in [`Directory.Build.props`](Directory.Build.props) decides what everything
+targets:
+
+```xml
+<LibraryTargetFrameworks>net10.0</LibraryTargetFrameworks>
+```
+
+Give it a `;`-separated list to multi-target — `net10.0;net9.0` — and every project follows.
+
+What the file does with that value is the part worth knowing, because getting it wrong produces
+a failure that only some tools see. It sets **`TargetFramework`** (singular) for a single
+framework and **`TargetFrameworks`** (plural) only for a real list.
+
+Setting the plural property makes a project a **cross-targeting** build *even with one entry*.
+A cross-targeting project is really two builds: an outer build that only dispatches, and an inner
+build per framework that does the work — and most SDK targets exist only on the inner build. Ask
+an outer build for one of them and you get:
+
+```
+error MSB4057: The target "GetTargetPath" does not exist in the project.
+```
+
+`dotnet build` never shows this, because the CLI drives the outer→inner dispatch itself and never
+asks the outer build for a target it lacks. Tools that query a project directly do: **Rider calls
+`GetTargetPath`** to resolve a project reference's output assembly, and fails on every project.
+The same root cause also appears as `MSB4036 PickBestRid` and `MSB4057 ComputeRunArguments` under
+the Aspire SDK — one defect wearing several faces, which makes it easy to patch per symptom
+instead of fixing once.
+
+A project can still override per-project. The conditions defer to a `TargetFramework` or
+`TargetFrameworks` it sets itself — but because `Directory.Build.props` is imported *before* the
+project body, one that wants to multi-target against a single-framework repo default has to clear
+the singular as well:
+
+```xml
+<TargetFramework></TargetFramework>
+<TargetFrameworks>net10.0;net9.0</TargetFrameworks>
+```
+
 ### Versioning
 
 Versions are **derived from git**, not written by hand. There is no version string in
