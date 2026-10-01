@@ -394,7 +394,18 @@ pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 	@# packable — an application rather than a library — never has `dotnet pack` create it, so
 	@# without this the SBOM step breaks on a clean tree.
 	@mkdir -p "$(PACKAGE_DIR)"
-	dotnet pack --no-build --configuration $(CONFIGURATION)
+	@# WarnOnPackingNonPackableProject=false, because `dotnet pack` sets it to true and the Web
+	@# SDK leaves it that way, so every Microsoft.NET.Sdk.Web project that is not packable draws:
+	@#
+	@#     warning : This project cannot be packaged because packaging has been disabled.
+	@#
+	@# In an application built from this template that describes every project, so the warning
+	@# reports the intended configuration as a problem — and it is a warning, which makes it
+	@# noise in a build that treats warnings seriously. The SDK gates the message on exactly this
+	@# property (see IsPackableFalseWarningTask in NuGet.Build.Tasks.Pack.targets), so this is the
+	@# supported way to turn it off rather than a filter over the output. The case worth knowing
+	@# about — that nothing was packable — is reported below as a plain message instead.
+	dotnet pack --no-build --configuration $(CONFIGURATION) -p:WarnOnPackingNonPackableProject=false
 	@ls -1 "$(PACKAGE_DIR)" 2> /dev/null | sed 's/^/make: packed /' || \
 		{ echo 'make: pack produced nothing in $(PACKAGE_DIR).' 1>&2; exit 1; }
 
