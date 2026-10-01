@@ -33,8 +33,8 @@ public class GoodToWalkService
     /// </exception>
     public GoodToWalkService(IWeatherService weatherService, ILogger<GoodToWalkService> logger)
     {
-        this._weatherService = weatherService ?? throw new ArgumentNullException(nameof(weatherService));
-        this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _weatherService = weatherService ?? throw new ArgumentNullException(nameof(weatherService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
