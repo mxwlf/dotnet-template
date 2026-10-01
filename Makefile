@@ -389,6 +389,11 @@ pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 		''|/*) echo 'make: refusing to clean PACKAGE_DIR=$(PACKAGE_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
 	esac
 	@rm -rf "$(PACKAGE_DIR)"
+	@# Recreated empty rather than left absent, because `sbom` uses $(PACKAGE_DIR) as its build
+	@# drop and sbom-tool fails outright on a missing -b path. A repository where nothing is
+	@# packable — an application rather than a library — never has `dotnet pack` create it, so
+	@# without this the SBOM step breaks on a clean tree.
+	@mkdir -p "$(PACKAGE_DIR)"
 	dotnet pack --no-build --configuration $(CONFIGURATION)
 	@ls -1 "$(PACKAGE_DIR)" 2> /dev/null | sed 's/^/make: packed /' || \
 		{ echo 'make: pack produced nothing in $(PACKAGE_DIR).' 1>&2; exit 1; }

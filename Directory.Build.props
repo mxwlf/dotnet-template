@@ -56,6 +56,27 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <DebugType>portable</DebugType>
 
+    <!-- Write source-generator output to disk. Generators do not persist their output by default,
+         and the compiler then records a synthetic path for each generated document — a path that
+         reaches the PDB and therefore the coverage data. reportgenerator reads it, finds nothing,
+         and logs for every generated file:
+
+             File '.../LoggerMessage.g.cs' does not exist (any more).
+
+         Emitting makes those paths real: with this set the compiler records where it actually wrote
+         the file, and the report renders generated code instead of warning about it. No coverage
+         NUMBER changes — the lines were always counted; only the source behind them was missing.
+
+         Do NOT try to redirect this with $(CompilerGeneratedFilesOutputPath) to remove the
+         `generated/` segment the SDK appends. Pointing it at the intermediate directory makes the
+         compiler reject the argument outright, on every project that has no generator output:
+
+             error CS2021: File name '.../obj/<project>/release/' is empty, contains invalid
+             characters, ...
+
+         Everything written lands under $(ArtifactsPath), which is gitignored. -->
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -105,6 +126,21 @@
     <PackageValidationBaselineVersion Condition="'$(ApiCompatBaselineVersion)' != ''">$(ApiCompatBaselineVersion)</PackageValidationBaselineVersion>
     <ApiCompatSuppressionFile Condition="Exists('$(MSBuildThisFileDirectory)eng/versions/CompatibilitySuppressions.xml')">$(MSBuildThisFileDirectory)eng/versions/CompatibilitySuppressions.xml</ApiCompatSuppressionFile>
   </PropertyGroup>
+
+  <!-- The deny-list that Microsoft.CodeAnalysis.BannedApiAnalyzers enforces as RS0030. The package
+       supplies the analyzer and nothing else: its targets add no AdditionalFiles item of their own,
+       so without this the analyzer loads on every build, finds no list, and reports nothing — which
+       is exactly what it did here until this item was added.
+
+       One list for the whole repository, hence $(MSBuildThisFileDirectory) rather than a relative
+       path: AdditionalFiles is resolved against each consuming project's directory, so a bare
+       `BannedSymbols.txt` would silently resolve to nothing in every project that does not have its
+       own copy. A project that needs to ban more than the repository does — keeping a transport
+       library out of the domain, say — adds a second AdditionalFiles item for its own file; the
+       lists are unioned. There is no way to un-ban, so anything added here is added everywhere. -->
+  <ItemGroup>
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />
