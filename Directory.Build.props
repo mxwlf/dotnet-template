@@ -1,6 +1,34 @@
 <Project>
   <PropertyGroup>
+    <!-- The one place to change which frameworks everything targets. Use a `;`-separated list to
+         multi-target: `net10.0;net9.0`. -->
     <LibraryTargetFrameworks>net10.0</LibraryTargetFrameworks>
+
+    <!-- Singular for one framework, plural for several — and the distinction matters far more than
+         it looks.
+
+         Setting $(TargetFrameworks) makes a project a CROSS-TARGETING build even when the list has
+         a single entry. A cross-targeting project is really two builds: an outer build that only
+         dispatches, and an inner build per framework that does the work. Most SDK targets exist
+         only on the inner build, so on the outer build they are simply absent:
+
+             error MSB4057: The target "GetTargetPath" does not exist in the project.
+
+         `dotnet build` hides this, because the CLI drives the outer→inner dispatch itself and never
+         asks the outer build for a target it lacks. Anything that queries a project directly does
+         not: Rider calls GetTargetPath to resolve a project reference's output assembly and fails
+         on every project, and the same root cause surfaces as MSB4036 PickBestRid and MSB4057
+         ComputeRunArguments under the Aspire SDK. One defect, several faces.
+
+         So: set the singular property when there is one framework, which keeps every project a
+         plain single-targeting build, and fall back to the plural only for a real list. The
+         $(TargetFramework)/$(TargetFrameworks) guards mean a project that sets either itself still
+         wins; note that because this file is imported before the project body, a project
+         multi-targeting against the repo default has to clear the singular as well:
+
+             <TargetFramework></TargetFramework>
+             <TargetFrameworks>net10.0;net9.0</TargetFrameworks> -->
+    <TargetFramework Condition="'$(TargetFramework)' == '' and '$(TargetFrameworks)' == '' and '$(LibraryTargetFrameworks)' != '' and !$(LibraryTargetFrameworks.Contains(';'))">$(LibraryTargetFrameworks)</TargetFramework>
     <TargetFrameworks Condition="'$(TargetFramework)' == '' and '$(TargetFrameworks)' == ''">$(LibraryTargetFrameworks)</TargetFrameworks>
 
     <ImplicitUsings>enable</ImplicitUsings>
