@@ -66,7 +66,7 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./scripts/github-rulesets.sh
 
-.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage pack sbom \
+.PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage pack sbom prune-stale-output \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
@@ -181,7 +181,35 @@ check-python: ## Verify the interpreter used to build .venv is new enough
 		exit 1; \
 	}
 
-build: check-dotnet ## Build every project with analyzers enforced
+# Output directories outlive the project that produced them. `dotnet build` only ever writes; it
+# never notices that a project was deleted or renamed, so $(ARTIFACTS_DIR)/bin keeps the old
+# directory indefinitely. That is not cosmetic, because what reads that tree is a glob: `test`
+# discovers executables with $(ARTIFACTS_DIR)/bin/*.tests.*, so a deleted test project goes on being
+# run forever — passing, reporting coverage, and quietly propping up the totals. Measured on a
+# repository built from this template, right after deleting a project: 85.5% line / 81.8% branch
+# with the orphaned assembly still executing, 84.4% / 78.7% once it was pruned.
+#
+# Pruning rather than wiping the tree, so incremental builds keep working: only directories with no
+# matching .csproj are removed. The worst case for a mistake here is a slower rebuild, never lost
+# work, because everything under $(ARTIFACTS_DIR) is generated.
+prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longer exist
+	@case '$(ARTIFACTS_DIR)' in \
+		''|/*) echo 'make: refusing to prune ARTIFACTS_DIR=$(ARTIFACTS_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
+	esac
+	@current=$$(find . -name '*.csproj' -not -path './$(ARTIFACTS_DIR)/*' -not -path './$(VENV)/*' \
+		-exec basename {} .csproj \; 2> /dev/null | sort -u); \
+	[ -n "$$current" ] || { echo 'make: found no .csproj files; skipping prune.' 1>&2; exit 0; }; \
+	for tree in bin obj publish; do \
+		[ -d "$(ARTIFACTS_DIR)/$$tree" ] || continue; \
+		for dir in "$(ARTIFACTS_DIR)/$$tree"/*; do \
+			[ -d "$$dir" ] || continue; \
+			name=$$(basename "$$dir"); \
+			printf '%s\n' "$$current" | grep -qxF "$$name" \
+				|| { echo "make: pruning stale output $$dir"; rm -rf "$$dir"; }; \
+		done; \
+	done
+
+build: check-dotnet prune-stale-output ## Build every project with analyzers enforced
 	dotnet build --configuration $(CONFIGURATION)
 
 # Tests run on Microsoft.Testing.Platform (opted into by the "test" section of global.json), which

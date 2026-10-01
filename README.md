@@ -830,6 +830,7 @@ Bump these versions deliberately when you want to upgrade.
 | `make ci` | Run the full CI check suite — the single command CI/CD pipelines invoke. Runs identically locally. |
 | `make lint` | Run all pre-commit hooks against all files. |
 | `make build` | Build every project with analyzers enforced. |
+| `make prune-stale-output` | Remove `artifacts/` output for projects that no longer exist. A dependency of `build`: output outlives a deleted project, and `make test` discovers executables by glob, so an orphaned test assembly would keep running and inflating coverage. |
 | `make test` | Run every test project, writing the TRX report and Cobertura coverage into `artifacts/test-results/`. On GitHub Actions, also emits the test report (log groups, failure annotations, job summary) and updates the history snapshot in `artifacts/test-history/`. |
 | `make coverage` | Merge every module's Cobertura file into one report in `artifacts/coverage/` (Cobertura, markdown, text, HTML) and fail below `COVERAGE_MIN_LINE`. On GitHub Actions, appends the merged figures to the job summary. |
 | `make pack` | Produce the NuGet packages (`.nupkg` + `.snupkg`) into `artifacts/package/`. Part of `make ci`. |
