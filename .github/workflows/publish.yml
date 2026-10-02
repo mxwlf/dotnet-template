@@ -95,6 +95,23 @@ jobs:
       # that gate a merge. This produces artifacts/package/<config>/ and the SBOM.
       - run: make ci
 
+      # Packaging is opt-in per project, so a repository can legitimately have nothing packable —
+      # an application rather than a library. Everything below that handles a package therefore has
+      # to stand down rather than fail: the attestations have no subject, `dotnet nuget push` errors
+      # on a glob that matches nothing, and the Release has no assets to attach.
+      #
+      # Reported as a notice rather than a warning: for an application this is the intended state.
+      # A tag on such a repository still produces a GitHub Release, just without assets.
+      - name: Record whether packages were produced
+        id: packages
+        run: |
+          if [ -n "$(ls -A artifacts/package/release 2> /dev/null)" ]; then
+            echo "produced=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "produced=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No packages produced — no project sets IsPackable=true. Nothing will be published to nuget.org."
+          fi
+
       # Attest the artifact THIS run produced, before pushing it. An attestation binds a digest,
       # so it must be generated against the exact bytes that go to nuget.org. Re-packing after
       # attesting — or attesting a different run's output — leaves claims that silently do not
@@ -103,7 +120,7 @@ jobs:
       # attempt fails the job rather than warning. See the attest job in ci.yml for the detail;
       # on GitHub Enterprise Cloud, drop this condition.
       - uses: actions/attest-build-provenance@v4
-        if: ${{ !github.event.repository.private }}
+        if: ${{ !github.event.repository.private && steps.packages.outputs.produced == 'true' }}
         with:
           subject-path: |
             artifacts/package/release/*.nupkg
@@ -113,7 +130,7 @@ jobs:
       # action, which takes the same `sbom-path` input and derives the SPDX predicate type from the
       # document itself. attest-build-provenance above is NOT deprecated and stays as it is.
       - uses: actions/attest@v4
-        if: ${{ !github.event.repository.private }}
+        if: ${{ !github.event.repository.private && steps.packages.outputs.produced == 'true' }}
         with:
           subject-path: |
             artifacts/package/release/*.nupkg
@@ -124,6 +141,7 @@ jobs:
       # earlier in a long job can expire before it is used.
       - name: NuGet login (OIDC)
         id: login
+        if: steps.packages.outputs.produced == 'true'
         uses: NuGet/login@v1
         with:
           user: ${{ secrets.NUGET_USER }} # nuget.org username, NOT the email address
@@ -132,6 +150,7 @@ jobs:
       # exists. The matching .snupkg is pushed automatically alongside the .nupkg; --no-symbols
       # would opt out.
       - name: Push to nuget.org
+        if: steps.packages.outputs.produced == 'true'
         run: >
           dotnet nuget push artifacts/package/release/*.nupkg
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
@@ -150,7 +169,7 @@ jobs:
       # `gh` is preinstalled on the runner, so this needs no third-party action. Idempotent on
       # purpose: a re-run uploads over the existing assets instead of failing with 422
       # already_exists, which is the documented trap with release actions.
-      - name: Publish a GitHub Release with the attested packages
+      - name: Publish a GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -159,12 +178,21 @@ jobs:
           # the latest stable release.
           case "$tag" in *-*) prerelease="--prerelease" ;; *) prerelease="" ;; esac
 
-          if gh release view "$tag" > /dev/null 2>&1; then
-            echo "Release $tag exists; replacing its assets."
-            gh release upload "$tag" artifacts/package/release/*.nupkg \
-                                     artifacts/package/release/*.snupkg --clobber
+          # Assets are collected into the positional parameters so the empty case needs no special
+          # command: a repository with nothing packable still gets a Release, with notes and no
+          # files. `set --` clears them first, since this shell inherits none.
+          set --
+          if [ -n "$(ls -A artifacts/package/release 2> /dev/null)" ]; then
+            set -- artifacts/package/release/*
           else
-            gh release create "$tag" artifacts/package/release/*.nupkg \
-                                     artifacts/package/release/*.snupkg \
-              --title "$tag" --generate-notes --verify-tag $prerelease
+            echo "::notice::No packages to attach; creating the Release without assets."
+          fi
+
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "Release $tag exists."
+            if [ "$#" -gt 0 ]; then
+              gh release upload "$tag" "$@" --clobber
+            fi
+          else
+            gh release create "$tag" "$@" --title "$tag" --generate-notes --verify-tag $prerelease
           fi
