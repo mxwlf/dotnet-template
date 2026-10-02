@@ -723,6 +723,20 @@ signature to everything on upload, independently. An **author** signature is a s
 mechanism needing a code-signing certificate — see
 [Code signing](#code-signing-what-is-and-is-not-covered).
 
+> **Private repositories skip this.** Artifact attestations are not available for user-owned
+> private repositories, and attempting one there does not warn — it fails the job:
+>
+> ```
+> Error: Failed to persist attestation: Feature not available for user-owned private repositories.
+> ```
+>
+> Both workflows therefore condition their attestation on `!github.event.repository.private`, so a
+> repository that goes private does not need its CI edited and one that goes public starts
+> attesting again on its own. On GitHub Enterprise Cloud, where attestations *do* work for private
+> repositories, drop that condition. Note the knock-on: with no attestations, the `.nupkg` attached
+> to a GitHub Release is still the artifact that was built, but there is nothing to verify it
+> against.
+
 Two implementation notes, both deliberate:
 
 - **The attestations live in their own job.** They need `id-token: write` and

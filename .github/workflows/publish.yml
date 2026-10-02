@@ -99,7 +99,11 @@ jobs:
       # so it must be generated against the exact bytes that go to nuget.org. Re-packing after
       # attesting — or attesting a different run's output — leaves claims that silently do not
       # apply to the package anyone installs.
+      # Skipped on a user-owned private repository, where attestations are unavailable and the
+      # attempt fails the job rather than warning. See the attest job in ci.yml for the detail;
+      # on GitHub Enterprise Cloud, drop this condition.
       - uses: actions/attest-build-provenance@v4
+        if: ${{ !github.event.repository.private }}
         with:
           subject-path: |
             artifacts/package/release/*.nupkg
@@ -109,6 +113,7 @@ jobs:
       # action, which takes the same `sbom-path` input and derives the SPDX predicate type from the
       # document itself. attest-build-provenance above is NOT deprecated and stays as it is.
       - uses: actions/attest@v4
+        if: ${{ !github.event.repository.private }}
         with:
           subject-path: |
             artifacts/package/release/*.nupkg
