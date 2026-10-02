@@ -142,6 +142,24 @@
     <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" />
   </ItemGroup>
 
+  <!-- Every rule of every analyzer, on, as a warning. $(AnalysisMode) does this for CA and the
+       category-Style entry in .editorconfig does it for IDE, but neither reaches the third-party
+       analyzers, and no bulk entry can: `dotnet_analyzer_diagnostic.severity` and its per-category
+       form only re-rank rules that are already enabled — they do not switch on a rule its analyzer
+       ships disabled. Verified by probe, and corroborated by the SDK itself implementing
+       <AnalysisMode>All</AnalysisMode> as 281 explicit CA entries rather than one line.
+
+       So the strict default is reached by naming all 1,381 rules, which is a generated file:
+           dotnet run eng/analyzers/sync-rules.cs
+
+       A global config deliberately LOSES to .editorconfig for any file .editorconfig matches, so
+       every deliberate relaxation lives in the root .editorconfig or test/.editorconfig next to the
+       reason for it, and survives the next regeneration. That is the whole point of the split: this
+       file says "everything", and the .editorconfig files say "except, because". -->
+  <ItemGroup>
+    <EditorConfigFiles Include="$(MSBuildThisFileDirectory)eng/analyzers/all-rules.globalconfig" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Meziantou.Analyzer" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />

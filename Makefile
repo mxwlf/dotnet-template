@@ -127,7 +127,21 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint build test coverage pack sbom ## Run the full CI check suite (what pipelines invoke)
+ci: lint analyzers-verify build test coverage pack sbom ## Run the full CI check suite (what pipelines invoke)
+
+# The strict analyzer default is an explicit entry per rule in
+# eng/analyzers/all-rules.globalconfig, because no bulk severity entry can switch on a rule its
+# analyzer ships disabled. That file is generated from whatever analyzers the projects currently
+# resolve, so bumping an analyzer package can add rules it does not mention yet — and a rule that is
+# not mentioned falls back to its own default, which for roughly a third of them is off. `verify`
+# fails the build in that case rather than letting the strict bar quietly soften; `sync` regenerates
+# it. It runs before `build` so a stale file is reported as itself instead of as a surprising
+# diagnostic count.
+analyzers-sync: check-dotnet ## Regenerate eng/analyzers/all-rules.globalconfig from the resolved analyzers
+	dotnet run eng/analyzers/sync-rules.cs
+
+analyzers-verify: check-dotnet ## Fail if eng/analyzers/all-rules.globalconfig is stale
+	dotnet run eng/analyzers/sync-rules.cs --check
 
 # The dotnet-build-test hook builds and tests the staged tree on `git commit`. `ci` reaches the same
 # code through its own `build` and `test` targets, so the hook is skipped here: leaving it in would
