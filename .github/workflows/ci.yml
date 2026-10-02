@@ -206,9 +206,19 @@ jobs:
   # Pull-request builds produce packages nobody can install, so attesting them would fill the log with
   # claims about artifacts that do not exist anywhere. Add `refs/tags/v*` to the condition when the
   # release workflow lands.
+  #
+  # WHY IT SKIPS PRIVATE REPOSITORIES: attestations are not available for user-owned private repos.
+  # Attempting one there does not warn, it fails the job:
+  #
+  #     Error: Failed to persist attestation: Feature not available for user-owned private repositories.
+  #
+  # Keying on repository visibility means one workflow serves both cases — a repo made private does
+  # not need its CI edited, and a repo made public starts attesting again on its own. If you are on
+  # GitHub Enterprise Cloud, where attestations DO work for private repositories, drop the
+  # `!github.event.repository.private` clause to turn them back on.
   attest:
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.private
     runs-on: ubuntu-24.04
     permissions:
       contents: read
