@@ -50,6 +50,11 @@ permissions:
 
 jobs:
   ci:
+    # Whether this build produced any packages. The attest job needs it, and so does the upload
+    # below: a repository that ships nothing — an application rather than a library — has no
+    # package artifact, and steps that assume one must stand down rather than fail.
+    outputs:
+      packages: ${{ steps.packages.outputs.produced }}
     # Pinned rather than `ubuntu-latest`: that label is remapped to a new Ubuntu release
     # periodically, which would change the build environment underneath you on GitHub's
     # schedule instead of yours. Bump this deliberately.
@@ -163,10 +168,32 @@ jobs:
       # Deliberately NOT if: always(). A package only exists when `make ci` got as far as `pack`, so
       # limiting this to a successful run lets if-no-files-found be an assertion rather than a shrug:
       # a green run that somehow produced no package fails here instead of silently uploading nothing.
+      # Whether `make pack` actually produced anything. Packaging is opt-in per project, so a
+      # repository can legitimately have nothing packable, and then there is no artifact to upload
+      # and nothing for the attest job to attest. Reported as a notice, not a warning: it is the
+      # intended configuration for an application, not a problem to flag.
+      #
+      # This step inherits the default success() condition, so on a failed build it is skipped, its
+      # output is empty, and every condition below reads false — which is what should happen.
+      - name: Record whether packages were produced
+        id: packages
+        run: |
+          if [ -n "$(ls -A artifacts/package/release 2> /dev/null)" ]; then
+            echo "produced=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "produced=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No packages produced — no project sets IsPackable=true."
+          fi
+
       - uses: actions/upload-artifact@v7
+        if: steps.packages.outputs.produced == 'true'
         with:
           name: package
           path: artifacts/package/
+          # Kept as an assertion rather than relaxed to `warn`: the step now only runs when packages
+          # were found on disk, so reaching it and finding none means the glob and the pack output
+          # have diverged, which is worth failing over. An empty directory does not count —
+          # upload-artifact ignores those, which is how this failed in the first place.
           if-no-files-found: error
           retention-days: 30
 
@@ -218,7 +245,7 @@ jobs:
   # `!github.event.repository.private` clause to turn them back on.
   attest:
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.private
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && !github.event.repository.private && needs.ci.outputs.packages == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
