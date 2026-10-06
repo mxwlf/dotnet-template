@@ -11,4 +11,17 @@
      It also means the generator is not held to the analyzer bar it generates, which would be
      circular. Nothing here ships: no project in the solution references anything in this folder. -->
 <Project>
+  <!-- Analysis off for the tool. Blocking the upward MSBuild search, which is what this file is
+       mainly for, does NOT stop the root .editorconfig applying: editorconfig discovery walks the
+       directory tree on its own and `root = true` up there covers this folder too. So the CA rules
+       the repository raises for product code were being applied to a single-file generator, which
+       reported a cyclomatic complexity of 36 and a class coupling of 52 on its top-level Main — true,
+       and beside the point for a script whose shape is "do these eight things in order". It also
+       put that noise in front of the `make analyzers-verify` output on every CI run.
+       Holding the generator to the bar it generates would be circular besides. -->
+  <PropertyGroup>
+    <RunAnalyzers>false</RunAnalyzers>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+  </PropertyGroup>
 </Project>

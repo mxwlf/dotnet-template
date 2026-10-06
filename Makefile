@@ -131,12 +131,13 @@ ci: lint analyzers-verify build test coverage pack sbom ## Run the full CI check
 
 # The strict analyzer default is an explicit entry per rule in
 # eng/analyzers/all-rules.globalconfig, because no bulk severity entry can switch on a rule its
-# analyzer ships disabled. That file is generated from whatever analyzers the projects currently
-# resolve, so bumping an analyzer package can add rules it does not mention yet — and a rule that is
-# not mentioned falls back to its own default, which for roughly a third of them is off. `verify`
-# fails the build in that case rather than letting the strict bar quietly soften; `sync` regenerates
-# it. It runs before `build` so a stale file is reported as itself instead of as a surprising
-# diagnostic count.
+# analyzer ships disabled. That file is generated from the analyzers the projects resolve from NuGet
+# — pinned by Directory.Packages.props and the lock files, so it is reproducible anywhere — so
+# bumping an analyzer package can add rules it does not mention yet, and a rule that is not
+# mentioned falls back to its own default, which for roughly a third of them is off. `verify` fails
+# the build in that case rather than letting the strict bar quietly soften, and names the rules that
+# differ; `sync` regenerates it. It runs before `build` so a stale file is reported as itself
+# instead of as a surprising diagnostic count.
 analyzers-sync: check-dotnet ## Regenerate eng/analyzers/all-rules.globalconfig from the resolved analyzers
 	dotnet run eng/analyzers/sync-rules.cs
 

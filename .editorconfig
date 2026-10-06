@@ -19,15 +19,18 @@
 #
 # WHERE EACH LAYER OF CONFIGURATION LIVES
 # ---------------------------------------
-#   * CA rules            the SDK's analysislevel_10_all.globalconfig, selected by $(AnalysisLevel)
-#                         and $(AnalysisMode) in Directory.Build.props. 280 rules at warning, with
-#                         CA1516 the single exception. Do not restate those here.
-#   * every other rule    eng/analyzers/all-rules.globalconfig, generated, one explicit entry per
-#                         rule for all 1,381 of them — CA, S, MA, RCS, VSTHRD, xUnit, NS, RS. It is
-#                         explicit per rule because no bulk entry can switch on a rule its analyzer
-#                         ships disabled, and roughly a third of them are shipped disabled. Do not
-#                         restate those here either, and do not put exceptions there: a global
-#                         config loses to this file, and the next regeneration would revert them.
+#   * CA rules            281 of the 316 from the SDK's analysislevel_10_all.globalconfig, selected
+#                         by $(AnalysisLevel) and $(AnalysisMode) in Directory.Build.props. Do not
+#                         restate those here. The other 38 ARE here, in their own section below,
+#                         because nothing else sets them and 11 ship disabled.
+#   * package analyzers   eng/analyzers/all-rules.globalconfig, generated, one explicit entry per
+#                         rule for all 1,065 of them — S, MA, RCS, VSTHRD, xUnit, NS, RS. Explicit
+#                         per rule because no bulk entry can switch on a rule its analyzer ships
+#                         disabled, and roughly a third of them are. Scoped to analyzers that
+#                         arrive as NuGet packages, whose versions are pinned; the SDK's own are
+#                         left out so the generated file does not depend on the floating SDK patch.
+#                         Do not put exceptions there: a global config loses to this file, and the
+#                         next regeneration would revert them.
 #   * IDE rules           this file, via the category-Style entry below. They are not in the
 #                         generated file because the code-style analyzers cannot be enumerated the
 #                         way the others can; they are all enabled by default anyway, so promoting
@@ -472,6 +475,80 @@ dotnet_diagnostic.S4055.severity = none
 # Worth it for a type with enough state that the debugger's default rendering is unhelpful. Applied
 # to every DTO — two properties and nothing else — it is attribute noise on the declaration.
 dotnet_diagnostic.RCS1223.severity = none
+# ----------------------------------------------------------------------------------------------
+# The CA rules <AnalysisMode>All</AnalysisMode> does not reach
+#
+# The SDK implements that property as a global config of explicit per-rule entries, and it covers
+# 281 of the 316 CA ids the analyzer ships. The other 38 are listed here because nothing else sets
+# them, and 11 of those are shipped DISABLED - so without this block they never ran, however strict
+# the rest of the configuration looked.
+#
+# Written out by hand rather than generated, deliberately. eng/analyzers/all-rules.globalconfig is
+# generated from the analyzers the projects resolve, and it covers only the ones that arrive as
+# NuGet packages, whose versions are pinned by Directory.Packages.props and the lock files. The CA
+# analyzer ships inside the SDK, and global.json floats the SDK patch (`rollForward: latestPatch`),
+# so generating these made the committed file depend on which patch the machine happened to have:
+# it was produced on 10.0.203 and CI resolved 10.0.204, and `make analyzers-verify` failed with
+# nothing a developer could usefully do about it. Stable text has no such problem.
+#
+# The trade is explicit: if a later SDK ships a CA rule that it also leaves unconfigured, that rule
+# sits at its own default until someone adds it here. That is a gap rather than a broken build,
+# which is the right way round. CA1516 is absent on purpose - the SDK sets it to `none` and that
+# decision is theirs to make.
+# ----------------------------------------------------------------------------------------------
+
+# Code metrics: inheritance depth, cyclomatic complexity, maintainability index and class coupling.
+# All four ship disabled, which is why a codebase can grow a 40-dependency entry point without ever
+# being told. Thresholds come from eng/analyzers/CodeMetricsConfig.txt; CA1509 reports a malformed
+# entry in it.
+dotnet_diagnostic.CA1501.severity = warning
+dotnet_diagnostic.CA1502.severity = warning
+dotnet_diagnostic.CA1505.severity = warning
+dotnet_diagnostic.CA1506.severity = warning
+dotnet_diagnostic.CA1509.severity = warning
+
+# Legacy FxCop API-design rules, all shipped disabled. They constrain a public surface that other
+# languages and COM can consume, which is exactly the bar a library published to a feed should
+# meet. CA1014 and CA1017 are satisfied by the assembly attributes in Directory.Build.targets.
+dotnet_diagnostic.CA1005.severity = warning
+dotnet_diagnostic.CA1014.severity = warning
+dotnet_diagnostic.CA1017.severity = warning
+dotnet_diagnostic.CA1021.severity = warning
+dotnet_diagnostic.CA1045.severity = warning
+dotnet_diagnostic.CA1060.severity = warning
+
+# The remaining 27. These are already enabled by default, so this block is not switching them on -
+# it pins the severity so that a change to an analyzer's own default cannot quietly demote one.
+# Platform compatibility (CA1416-CA1422), the P/Invoke and span correctness rules, and the `await`
+# and exception-rethrow checks are all here.
+dotnet_diagnostic.CA1416.severity = warning
+dotnet_diagnostic.CA1417.severity = warning
+dotnet_diagnostic.CA1418.severity = warning
+dotnet_diagnostic.CA1420.severity = warning
+dotnet_diagnostic.CA1422.severity = warning
+dotnet_diagnostic.CA1831.severity = warning
+dotnet_diagnostic.CA1857.severity = warning
+dotnet_diagnostic.CA2013.severity = warning
+dotnet_diagnostic.CA2014.severity = warning
+dotnet_diagnostic.CA2015.severity = warning
+dotnet_diagnostic.CA2017.severity = warning
+dotnet_diagnostic.CA2018.severity = warning
+dotnet_diagnostic.CA2021.severity = warning
+dotnet_diagnostic.CA2022.severity = warning
+dotnet_diagnostic.CA2023.severity = warning
+dotnet_diagnostic.CA2024.severity = warning
+dotnet_diagnostic.CA2200.severity = warning
+dotnet_diagnostic.CA2247.severity = warning
+dotnet_diagnostic.CA2255.severity = warning
+dotnet_diagnostic.CA2256.severity = warning
+dotnet_diagnostic.CA2257.severity = warning
+dotnet_diagnostic.CA2258.severity = warning
+dotnet_diagnostic.CA2259.severity = warning
+dotnet_diagnostic.CA2260.severity = warning
+dotnet_diagnostic.CA2261.severity = warning
+dotnet_diagnostic.CA2264.severity = warning
+dotnet_diagnostic.CA2265.severity = warning
+
 
 
 

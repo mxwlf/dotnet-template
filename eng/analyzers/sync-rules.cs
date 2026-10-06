@@ -34,14 +34,27 @@ var projects = Directory.EnumerateFiles(Path.Combine(repoRoot, "src"), "*.csproj
 var assemblies = new SortedSet<string>(StringComparer.Ordinal);
 foreach (var project in projects)
 {
-    // Package analyzers land in ResolvedAnalyzers, SDK ones in Analyzer. Both are needed, and
-    // ResolvePackageAssets has to run first or ResolvedAnalyzers comes back empty.
-    foreach (var item in new[] { "ResolvedAnalyzers", "Analyzer" })
+    // ResolvedAnalyzers only - the analyzers that arrive as NuGet packages. ResolvePackageAssets
+    // has to run first or it comes back empty.
+    //
+    // The SDK's own analyzers (@(Analyzer): NetAnalyzers, CodeStyle) are deliberately NOT read, and
+    // the reason is determinism rather than taste. This file is committed and `--check` fails the
+    // build when it does not match, so everything it is generated from has to be pinned. Package
+    // analyzer versions are, by Directory.Packages.props and the lock files. The SDK's are not:
+    // global.json pins 10.0.203 with `rollForward: latestPatch`, so CI legitimately resolves
+    // 10.0.204, and the NetAnalyzers assembly ships inside the SDK and changes with it. Reflecting
+    // over it made the generated file a function of the patch level the machine happened to have,
+    // which failed CI for no reason a developer could act on - regenerating would only move the
+    // failure to the other machine.
+    //
+    // Nothing is lost by leaving CA out. $(AnalysisMode)=All already configures 281 of the 316 CA
+    // ids, and it tracks the SDK automatically because the SDK ships that config beside the
+    // analyzer. The 38 it leaves alone are named explicitly in .editorconfig instead - stable text
+    // that no SDK bump can invalidate. Generating them here also silently overrode the one rule the
+    // SDK deliberately disables, CA1516, by re-enabling it from a second global config.
+    foreach (var path in MSBuildItem(project, "ResolvedAnalyzers"))
     {
-        foreach (var path in MSBuildItem(project, item))
-        {
-            assemblies.Add(path);
-        }
+        assemblies.Add(path);
     }
 }
 
@@ -83,14 +96,60 @@ var text = Render(rules, projects.Length, assemblies.Count, skipped);
 if (check)
 {
     var existing = File.Exists(output) ? File.ReadAllText(output) : "";
-    if (existing.Replace("\r\n", "\n") == text.Replace("\r\n", "\n"))
+    if (Normalize(existing) == Normalize(text))
     {
         Console.WriteLine($"all-rules.globalconfig is current ({rules.Count} rules).");
         return 0;
     }
 
-    Console.Error.WriteLine("all-rules.globalconfig is stale. Run: dotnet run eng/analyzers/sync-rules.cs");
+    // Say WHAT differs, not just that something does. A bare "stale" costs a round trip to work
+    // out whether a package bump added rules, whether a rule changed severity, or whether only the
+    // header counts moved.
+    Console.Error.WriteLine("all-rules.globalconfig is stale.");
+
+    var committed = ParseEntries(existing);
+    var expected = ParseEntries(text);
+
+    Report("only in the committed file (rule gone from the analyzers)", committed.Keys.Except(expected.Keys));
+    Report("missing from the committed file (new rule)", expected.Keys.Except(committed.Keys));
+    Report(
+        "severity changed",
+        committed.Keys.Intersect(expected.Keys)
+            .Where(id => committed[id] != expected[id])
+            .Select(id => $"{id}: {committed[id]} -> {expected[id]}"));
+
+    if (committed.Count == expected.Count && !committed.Except(expected).Any())
+    {
+        Console.Error.WriteLine("  the rules are identical; only the header differs.");
+    }
+
+    Console.Error.WriteLine("Run: dotnet run eng/analyzers/sync-rules.cs");
     return 1;
+}
+
+static string Normalize(string s) => s.Replace("\r\n", "\n");
+
+static Dictionary<string, string> ParseEntries(string content)
+{
+    var entries = new Dictionary<string, string>(StringComparer.Ordinal);
+    foreach (var line in Normalize(content).Split('\n'))
+    {
+        var trimmed = line.Trim();
+        if (!trimmed.StartsWith("dotnet_diagnostic.", StringComparison.Ordinal)) continue;
+        var parts = trimmed.Split('=', 2);
+        if (parts.Length != 2) continue;
+        var id = parts[0].Trim();
+        id = id["dotnet_diagnostic.".Length..].Replace(".severity", "", StringComparison.Ordinal);
+        entries[id] = parts[1].Trim();
+    }
+    return entries;
+}
+
+static void Report(string label, IEnumerable<string> items)
+{
+    var list = items.OrderBy(x => x, StringComparer.Ordinal).ToList();
+    if (list.Count == 0) return;
+    Console.Error.WriteLine($"  {label} ({list.Count}): {string.Join(", ", list.Take(25))}{(list.Count > 25 ? ", ..." : "")}");
 }
 
 File.WriteAllText(output, text);
@@ -114,9 +173,14 @@ static string Render(
         # Regenerate with, from the repository root:
         #     dotnet run eng/analyzers/sync-rules.cs
         #
-        # Every analyzer rule every project in this repository loads, each named explicitly, because
-        # bulk severity entries do not switch on a rule its analyzer ships disabled - only an explicit
-        # per-rule entry does. See the header of sync-rules.cs for the evidence.
+        # Every rule of every analyzer this repository resolves from NuGet, each named explicitly,
+        # because bulk severity entries do not switch on a rule its analyzer ships disabled - only an
+        # explicit per-rule entry does. See the header of sync-rules.cs for the evidence.
+        #
+        # Package analyzers only. The SDK's own (CA, IDE) are deliberately absent: their versions move
+        # with the SDK, which global.json floats, so generating them made this file disagree with
+        # itself between machines. CA is handled by $(AnalysisMode) plus an explicit block in
+        # .editorconfig; IDE by the category-Style entry there.
         #
         # Severity is `warning`, which $(TreatWarningsAsErrors) turns into an error in Release - so
         # Release and CI hold the strict bar while a Debug build still only warns. Rules whose own
@@ -134,9 +198,8 @@ static string Render(
     sb.Append($"# {rules.Count} rules from {assemblyCount} analyzer assemblies across {projectCount} projects.\n");
     if (skipped.Count > 0)
     {
-        sb.Append("# Assemblies contributing no C# rules (source generators, code-fix-only, or built against a\n");
-        sb.Append("# different Microsoft.CodeAnalysis than this script loads - IDE* rules are covered by the\n");
-        sb.Append("# category-Style entry in .editorconfig instead):\n");
+        sb.Append("# Assemblies contributing no C# rules - source generators, and the code-fix halves of the\n");
+        sb.Append("# analyzers above, which carry the fixes rather than the diagnostics:\n");
         foreach (var s in skipped.Distinct().OrderBy(x => x, StringComparer.Ordinal))
         {
             sb.Append($"#   {s}\n");
