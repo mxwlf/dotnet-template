@@ -91,6 +91,20 @@ foreach (var path in assemblies)
     if (found == 0) skipped.Add(Path.GetFileName(path));
 }
 
+// An empty result is always a broken environment, never a real answer: this repository always
+// references analyzer packages. Without this guard `--check` reports all 1,065 rules as deleted,
+// and - far worse - a plain run WRITES the empty file, silently taking the entire strict bar off
+// the build with a change that looks like a routine regeneration in review.
+if (projects.Length == 0 || assemblies.Count == 0 || rules.Count == 0)
+{
+    Console.Error.WriteLine(
+        $"Refusing to continue: found {projects.Length} projects, {assemblies.Count} analyzer " +
+        $"assemblies and {rules.Count} rules. Expected all three to be non-zero. The usual cause " +
+        "is a restore that did not happen or did not complete, leaving no project.assets.json for " +
+        "ResolvePackageAssets to read.");
+    return 2;
+}
+
 var text = Render(rules, projects.Length, assemblies.Count, skipped);
 
 if (check)
@@ -229,6 +243,11 @@ static IEnumerable<string> MSBuildItem(string project, string item)
     };
     psi.ArgumentList.Add("msbuild");
     psi.ArgumentList.Add(project);
+    // -restore matters more than it looks. ResolvePackageAssets reads project.assets.json, which
+    // only exists after a restore, and it reports NOTHING rather than failing when the file is
+    // absent. On a clean checkout - which is every CI run, and `analyzers-verify` runs before
+    // `build` - that produced an empty rule set from a successful-looking command.
+    psi.ArgumentList.Add("-restore");
     psi.ArgumentList.Add("-t:ResolvePackageAssets");
     psi.ArgumentList.Add($"-getItem:{item}");
     psi.ArgumentList.Add("-p:Configuration=Release");
