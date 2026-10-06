@@ -127,7 +127,7 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint analyzers-verify build test coverage pack sbom ## Run the full CI check suite (what pipelines invoke)
+ci: lint build analyzers-verify test coverage pack sbom ## Run the full CI check suite (what pipelines invoke)
 
 # The strict analyzer default is an explicit entry per rule in
 # eng/analyzers/all-rules.globalconfig, because no bulk severity entry can switch on a rule its
@@ -136,8 +136,18 @@ ci: lint analyzers-verify build test coverage pack sbom ## Run the full CI check
 # bumping an analyzer package can add rules it does not mention yet, and a rule that is not
 # mentioned falls back to its own default, which for roughly a third of them is off. `verify` fails
 # the build in that case rather than letting the strict bar quietly soften, and names the rules that
-# differ; `sync` regenerates it. It runs before `build` so a stale file is reported as itself
-# instead of as a surprising diagnostic count.
+# differ; `sync` regenerates it.
+#
+# Ordered after `build` to reuse its restore. The generator reads @(ResolvedAnalyzers), which
+# ResolvePackageAssets fills from project.assets.json, so it needs a restored tree; it passes
+# -restore itself and is correct standalone, but running it before `build` meant paying for a
+# second restore on every pipeline run. After `build` that flag costs nothing, because the assets
+# are already current.
+#
+# The cost of this order is that a stale file is reported after the build rather than before it, so
+# a package bump that adds an enabled-by-default rule can fail the build on that rule before this
+# target explains why the configuration is behind. The diagnostic names the rule and the fix is
+# `make analyzers-sync`, which is a short trip; a duplicated restore on every green run is not.
 analyzers-sync: check-dotnet ## Regenerate eng/analyzers/all-rules.globalconfig from the resolved analyzers
 	dotnet run eng/analyzers/sync-rules.cs
 

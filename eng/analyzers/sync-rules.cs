@@ -41,11 +41,11 @@ foreach (var project in projects)
     // the reason is determinism rather than taste. This file is committed and `--check` fails the
     // build when it does not match, so everything it is generated from has to be pinned. Package
     // analyzer versions are, by Directory.Packages.props and the lock files. The SDK's are not:
-    // global.json pins 10.0.203 with `rollForward: latestPatch`, so CI legitimately resolves
-    // 10.0.204, and the NetAnalyzers assembly ships inside the SDK and changes with it. Reflecting
-    // over it made the generated file a function of the patch level the machine happened to have,
-    // which failed CI for no reason a developer could act on - regenerating would only move the
-    // failure to the other machine.
+    // global.json pins a version with `rollForward: latestPatch`, so one machine may legitimately
+    // resolve a later patch than another, and the NetAnalyzers assembly ships inside the SDK and
+    // changes with it. Reflecting over it would make this file a function of the patch level the
+    // generating machine happened to have - a disagreement that regenerating moves rather than
+    // settles, because the other machine then produces the opposite diff.
     //
     // Nothing is lost by leaving CA out. $(AnalysisMode)=All already configures 281 of the 316 CA
     // ids, and it tracks the SDK automatically because the SDK ships that config beside the

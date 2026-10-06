@@ -159,10 +159,10 @@
 
        It covers package analyzers only, on purpose. Their versions are pinned by
        Directory.Packages.props and the lock files, so the generated file is reproducible on any
-       machine. The SDK's own analyzers are excluded because global.json floats the SDK patch, which
-       made the committed file depend on whichever patch the machine had — it was generated on
-       10.0.203, CI resolved 10.0.204, and the verify step failed with nothing a developer could act
-       on. The CA rules $(AnalysisMode) leaves unconfigured are named in .editorconfig instead.
+       machine. The SDK's own analyzers are excluded because global.json floats the SDK patch
+       (`rollForward: latestPatch`), which would make the committed file depend on whichever patch
+       the generating machine happened to have. The CA rules $(AnalysisMode) leaves unconfigured are
+       named in .editorconfig instead, as stable text.
 
        A global config deliberately LOSES to .editorconfig for any file .editorconfig matches, so
        every deliberate relaxation lives in the root .editorconfig or test/.editorconfig next to the
