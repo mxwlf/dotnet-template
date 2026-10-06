@@ -549,6 +549,81 @@ dotnet_diagnostic.CA2261.severity = warning
 dotnet_diagnostic.CA2264.severity = warning
 dotnet_diagnostic.CA2265.severity = warning
 
+# ----------------------------------------------------------------------------------------------
+# The ASP.NET Core and Blazor analyzers, pinned here for the same reason as the CA block above
+#
+# These ship with the Web SDK and the ASP.NET Core shared framework rather than as NuGet packages,
+# so eng/analyzers/all-rules.globalconfig does not cover them: it is scoped to analyzers whose
+# versions are pinned, and these move with the SDK. Same trade as the CA block — stable text, in
+# exchange for a list that has to be extended by hand.
+#
+# All 44 of them, enumerated by reflecting over the analyzer assemblies the compiler actually
+# loads. That is worth saying because the obvious source is wrong: the generated file only ever
+# listed nine of these, because @(ResolvedAnalyzers) and @(Analyzer) between them do not surface the
+# ones that arrive through the targeting pack — Microsoft.AspNetCore.App.Analyzers, which carries
+# ASP0003 to ASP0028, and Microsoft.AspNetCore.Components.Analyzers, which carries BL0001 to BL0009,
+# were never queried at all. Taking the generated file as the inventory undercounted by 35 rules.
+#
+# Inert until a project uses the Web SDK — an entry for a rule whose analyzer is not loaded is
+# ignored with no diagnostic, which was verified rather than assumed. So this costs nothing in a
+# repository with no web project, and is already right in one that grows its first.
+# ----------------------------------------------------------------------------------------------
+
+# The five that ship at `Info`, which never fails a build however strict the rest of the setup is.
+# These are the only entries in this block that change what the compiler does today; the rest pin a
+# severity that already applied.
+dotnet_diagnostic.ASP0015.severity = warning
+dotnet_diagnostic.ASP0018.severity = warning
+dotnet_diagnostic.ASP0025.severity = warning
+dotnet_diagnostic.ASP0027.severity = warning
+dotnet_diagnostic.ASP0028.severity = warning
+
+# Shipped at warning already. Listed so that a change to an analyzer's own default cannot quietly
+# demote one of them below the level this build fails at.
+dotnet_diagnostic.ASP0000.severity = warning
+dotnet_diagnostic.ASP0001.severity = warning
+dotnet_diagnostic.ASP0003.severity = warning
+dotnet_diagnostic.ASP0004.severity = warning
+dotnet_diagnostic.ASP0005.severity = warning
+dotnet_diagnostic.ASP0006.severity = warning
+dotnet_diagnostic.ASP0007.severity = warning
+dotnet_diagnostic.ASP0011.severity = warning
+dotnet_diagnostic.ASP0012.severity = warning
+dotnet_diagnostic.ASP0013.severity = warning
+dotnet_diagnostic.ASP0014.severity = warning
+dotnet_diagnostic.ASP0016.severity = warning
+dotnet_diagnostic.ASP0017.severity = warning
+dotnet_diagnostic.ASP0019.severity = warning
+dotnet_diagnostic.ASP0022.severity = warning
+dotnet_diagnostic.ASP0023.severity = warning
+dotnet_diagnostic.ASP0026.severity = warning
+dotnet_diagnostic.MVC1000.severity = warning
+dotnet_diagnostic.MVC1001.severity = warning
+dotnet_diagnostic.MVC1002.severity = warning
+dotnet_diagnostic.MVC1003.severity = warning
+dotnet_diagnostic.MVC1004.severity = warning
+dotnet_diagnostic.MVC1005.severity = warning
+dotnet_diagnostic.BL0002.severity = warning
+dotnet_diagnostic.BL0003.severity = warning
+dotnet_diagnostic.BL0005.severity = warning
+dotnet_diagnostic.BL0006.severity = warning
+dotnet_diagnostic.BL0007.severity = warning
+dotnet_diagnostic.BL0008.severity = warning
+dotnet_diagnostic.BL0009.severity = warning
+
+# Shipped as errors, and kept there. Writing `warning` for these would be a downgrade, and nothing
+# in this configuration is allowed to lower a bar by accident.
+dotnet_diagnostic.ASP0008.severity = error
+dotnet_diagnostic.ASP0009.severity = error
+dotnet_diagnostic.ASP0010.severity = error
+dotnet_diagnostic.ASP0020.severity = error
+dotnet_diagnostic.ASP0021.severity = error
+dotnet_diagnostic.ASP0024.severity = error
+dotnet_diagnostic.BL0001.severity = error
+dotnet_diagnostic.BL0004.severity = error
+dotnet_diagnostic.MVC1006.severity = error
+
+
 
 
 
