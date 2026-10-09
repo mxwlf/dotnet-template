@@ -214,6 +214,19 @@ check-python: ## Verify the interpreter used to build .venv is new enough
 # repository built from this template, right after deleting a project: 85.5% line / 81.8% branch
 # with the orphaned assembly still executing, 84.4% / 78.7% once it was pruned.
 #
+# $(TEST_RESULTS_DIR) AND $(TEST_HISTORY_DIR) HAVE THE SAME PROBLEM, THROUGH A SECOND GLOB.
+# `test` writes one `<project>.trx`, one `<project>.cobertura.xml` and one `<project>.json` per test
+# project, and `coverage` then merges "$(TEST_RESULTS_DIR)/*.cobertura.xml" — so a renamed or
+# deleted project leaves a report behind that every later run keeps merging. Renaming every test
+# project at once is what made this visible in a repository built from this template:
+# reportgenerator read 10 Cobertura files for 5 assemblies, counted every class twice under two
+# names, and printed a "does not exist (any more)" line for each source file in the stale half,
+# because those paths had moved.
+#
+# That is worse than noise. The merged total is computed over the union, and $(COVERAGE_THRESHOLDS)
+# is enforced against it, so the floor is being checked against partly fictional data — and the
+# duplicate assemblies are checked as if they were real ones.
+#
 # Pruning rather than wiping the tree, so incremental builds keep working: only directories with no
 # matching .csproj are removed. The worst case for a mistake here is a slower rebuild, never lost
 # work, because everything under $(ARTIFACTS_DIR) is generated.
@@ -231,6 +244,18 @@ prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longe
 			name=$$(basename "$$dir"); \
 			printf '%s\n' "$$current" | grep -qxF "$$name" \
 				|| { echo "make: pruning stale output $$dir"; rm -rf "$$dir"; }; \
+		done; \
+	done; \
+	for tree in '$(TEST_RESULTS_DIR)' '$(TEST_HISTORY_DIR)'; do \
+		case "$$tree" in \
+			''|/*) echo "make: refusing to prune '$$tree' — must be a non-empty relative path." 1>&2; exit 1 ;; \
+		esac; \
+		[ -d "$$tree" ] || continue; \
+		for file in "$$tree"/*; do \
+			[ -f "$$file" ] || continue; \
+			name=$$(basename "$$file" | sed -e 's/\.cobertura\.xml$$//' -e 's/\.trx$$//' -e 's/\.json$$//'); \
+			printf '%s\n' "$$current" | grep -qxF "$$name" \
+				|| { echo "make: pruning stale output $$file"; rm -f "$$file"; }; \
 		done; \
 	done
 
