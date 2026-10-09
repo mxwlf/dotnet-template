@@ -319,6 +319,10 @@ bld/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+# Where a bare `dotnet test` writes. The Makefile redirects results under artifacts/ instead, so
+# this only appears after an ad-hoc or IDE run — which is exactly why it needs ignoring here rather
+# than being left to whichever global gitignore a given machine happens to have.
+[Tt]est[Rr]esult*/
 **/Properties/launchSettings.json
 
 ## PHP / Composer
