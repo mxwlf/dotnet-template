@@ -9,7 +9,7 @@ make rulesets-diff      # fail if GitHub no longer matches this file
 make rulesets-export    # pull GitHub's version back into this file (after a UI edit)
 ```
 
-All three run [`scripts/github-rulesets.sh`](../../scripts/github-rulesets.sh),
+All three run [`eng/scripts/github-rulesets.sh`](../../eng/scripts/github-rulesets.sh),
 which talks to `/repos/{owner}/{repo}/rulesets` via `gh api`. The `gh ruleset`
 command group is read-only (`check`, `list`, `view`), so it cannot do this.
 
@@ -142,7 +142,7 @@ drift detection enforced.
 
 ## Editing
 
-JSON has no comments. `scripts/github-rulesets.sh` strips any key beginning with
+JSON has no comments. `eng/scripts/github-rulesets.sh` strips any key beginning with
 `_`, so a `"_comment"` key here is harmless — but `make rulesets-export`
 regenerates the file verbatim from the API and will drop it. Durable explanation
 belongs in this file.

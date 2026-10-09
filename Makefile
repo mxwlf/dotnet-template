@@ -64,7 +64,7 @@ PRE_COMMIT := $(VENV_BIN)/pre-commit
 # .venv; makes `venv` a no-op until the requirements change.
 VENV_STAMP := $(VENV)/.requirements-installed
 
-RULESETS := ./scripts/github-rulesets.sh
+RULESETS := ./eng/scripts/github-rulesets.sh
 
 .PHONY: setup venv ci lint pre-commit clean check-python check-dotnet help tools build test coverage pack sbom prune-stale-output \
         rulesets-apply rulesets-diff rulesets-export
@@ -173,7 +173,7 @@ clean: ## Remove the local virtualenv (rebuild it with `make setup`)
 # ---------------------------------------------------------------------------
 # Branch protection lives in .github/rulesets/*.json and is reconciled by name,
 # so `make rulesets-apply` rebuilds it in any repo created from this template.
-# See scripts/github-rulesets.sh for the details.
+# See eng/scripts/github-rulesets.sh for the details.
 #
 # These targets are deliberately NOT dependencies of `ci`: rulesets are admin
 # API surface, and a workflow's default GITHUB_TOKEN cannot read them. Making
