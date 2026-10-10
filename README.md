@@ -852,6 +852,7 @@ Bump these versions deliberately when you want to upgrade.
 | `make tools` | Restore the pinned local .NET tools from `.config/dotnet-tools.json`. |
 | — | Versions come from [`version.json`](version.json) + git history; there is no version make variable. See [Versioning](#versioning). |
 | `make clean` | Remove `.venv` (rebuild with `make setup`). |
+| `make deepclean` | Everything `clean` does, plus `dotnet clean`, `artifacts/`, `TestResults/` and any stray `bin/`/`obj/`. Takes the tree back to a fresh clone; restore with `make setup`. A repo that adds an npm workspace extends it to sweep `node_modules` and `dist` too. |
 | `make check-python` | Verify the interpreter used to build `.venv` is `>= 3.10`. |
 | `make rulesets-apply` | Create/update this repo's GitHub ruleset from `.github/rulesets/`. Needs `gh`. |
 | `make rulesets-diff` | Report drift between `.github/rulesets/` and the live ruleset. Needs `gh`. |
