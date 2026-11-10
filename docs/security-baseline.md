@@ -55,9 +55,10 @@ The `baseline-drift` workflow performs the same comparison on pull requests and
 weekly against a Git template commit pinned in the workflow. To adopt upstream
 changes, review the new baseline commit, update the pin, reconcile or document
 intentional differences, regenerate the Actions lock, and submit the changes as a
-PR. This detects changes relative to the pinned revision; it does not discover
-new upstream commits automatically. Projects forked from the template should
-choose their own trusted baseline repository and commit.
+PR. A weekly job also compares the pinned revision with upstream `main` for the
+same selected settings, reporting changes for review. It does not automatically
+create a PR or update the pin. Projects forked from the template should choose
+their own trusted baseline repository and commit.
 
 Record a deliberate difference in `.github/git-baseline-exceptions.json` with
 the exact reported `difference` and a nonempty `reason`; changes to that file
