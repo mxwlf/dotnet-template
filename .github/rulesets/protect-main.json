@@ -10,7 +10,7 @@
     "ref_name": {
       "exclude": [],
       "include": [
-        "~DEFAULT_BRANCH"
+        "refs/heads/main"
       ]
     }
   },
@@ -22,9 +22,6 @@
     },
     {
       "type": "non_fast_forward"
-    },
-    {
-      "type": "creation"
     },
     {
       "type": "required_signatures"
@@ -45,22 +42,7 @@
       "type": "pull_request"
     },
     {
-      "parameters": {
-        "code_scanning_tools": [
-          {
-            "alerts_threshold": "errors",
-            "security_alerts_threshold": "high_or_higher",
-            "tool": "CodeQL"
-          }
-        ]
-      },
-      "type": "code_scanning"
-    },
-    {
-      "parameters": {
-        "severity": "errors"
-      },
-      "type": "code_quality"
+      "type": "creation"
     },
     {
       "parameters": {

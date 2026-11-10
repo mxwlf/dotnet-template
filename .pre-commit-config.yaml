@@ -32,6 +32,10 @@ repos:
     rev: v6.0.0
     hooks:
     -   id: trailing-whitespace
+        # Two trailing spaces are a hard line break in Markdown. Without
+        # this, the hook strips them and silently reflows prose docs. This
+        # template's own files happen to have none, but a project's will.
+        args: ["--markdown-linebreak-ext=md,markdown"]
     -   id: end-of-file-fixer
     -   id: check-yaml
     -   id: check-added-large-files
@@ -41,6 +45,65 @@ repos:
     -   id: detect-private-key
     -   id: fix-byte-order-marker
     -   id: mixed-line-ending
+  # SPELL CHECKING MARKDOWN — TWO TOOLS, ON PURPOSE
+  # -----------------------------------------------
+  # Documentation is the part of a repository nobody compiles, so a typo in it
+  # survives every other check. Both hooks below are scoped to
+  # `types: [markdown]`. They are complementary, not redundant:
+  #
+  #   codespell matches a curated list of ~40k known typos against the WHOLE
+  #     file, code blocks included. It cannot invent a correction, so it is
+  #     safe to point at code and effectively never fires falsely — but it
+  #     only knows typos someone has already catalogued. They look like this:
+  #     "teh", "definately".  codespell:ignore teh,definately
+  #
+  #     That trailing directive exempts those two examples, and only that one
+  #     line — naming an example typo is indistinguishable from making one. It
+  #     is inert while this hook is markdown-only, and keeps this comment from
+  #     failing the check if you widen the scope as described below.
+  #
+  #   cspell checks every word against a real dictionary, so it also catches
+  #     one-off misspellings codespell has never heard of. That power is also
+  #     its cost: pointed at code it flags identifiers, CLI flags and file
+  #     paths. So cspell.json checks prose only, excluding code spans, fenced
+  #     blocks, link targets and HTML comments — see that file for each why.
+  #
+  # Net effect: prose gets full dictionary coverage, code blocks still get the
+  # high-confidence typo sweep, and neither hook blocks a PR over an
+  # identifier. Markdown is the conservative default for a template, since it
+  # is the one file type every repo made from this one is certain to have; to
+  # spell-check every text file too (YAML comments, shell scripts, the
+  # Makefile, and in a real project its source), drop the `types` override.
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.3
+    hooks:
+      - id: codespell
+        types: [markdown]
+        # No `.codespellrc`, deliberately. The one exemption this repo needs —
+        # the example typos in the README's spell-checking table, and in the
+        # comment above — is line-scoped with a `codespell:ignore` directive
+        # instead. Prefer that: a repo-wide `ignore-words-list` stops that
+        # typo being caught *everywhere*, which for a real typo is backwards.
+        # If a project does need the file, it takes INI comments, so record
+        # WHY each word is in it.
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v10.4.0
+    hooks:
+      - id: cspell
+        types: [markdown]
+        # Upstream's `args` end in `--files`, which must stay last for paths to
+        # be passed correctly — so this hook deliberately does not override
+        # `args`. All tuning lives in cspell.json instead.
+        #
+        # This is the only `language: node` hook here, and it needs no new
+        # prerequisite: pre-commit provisions the runtime itself through
+        # nodeenv, so the README's requirements list stays as short as it is.
+        #
+        # That runtime is pinned for the same reason CI pins Python: without a
+        # `language_version` pre-commit silently uses whatever `node` is on
+        # PATH, so the checker runs on a different runtime per machine. Bump
+        # deliberately; remove this line to use the system node instead.
+        language_version: "24.22.2"
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.30.1  # Specify the desired version of Gitleaks
     hooks:
