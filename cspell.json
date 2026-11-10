@@ -1,0 +1,72 @@
+// cspell configuration — the dictionary half of this repo's markdown spell
+// check. The hook that runs it is defined in .pre-commit-config.yaml; see the
+// comment there for why two spell checkers exist and how they divide the work.
+//
+// cspell reads JSON with comments, so the reasoning lives next to the setting.
+{
+  "version": "0.2",
+
+  // en = en-US. British spellings ("behaviour", "standardise") are therefore
+  // flagged, which keeps the docs internally consistent — it is how the typo
+  // "Standardising" was caught when this hook was added.
+  //
+  // Use "en,en-GB" to accept both dialects, or "en-GB" to switch. Note what
+  // switching does and does not buy you: en-GB rejects "behavior" but still
+  // accepts "standardized", because -ize is valid British spelling (Oxford)
+  // and -ise is a style preference a dictionary cannot adjudicate. Enforcing
+  // -ise needs a word list, not a locale.
+  "language": "en",
+
+  // Regions excluded from DICTIONARY checking. Everything excluded here is
+  // still swept by codespell's known-typo list, so these are not blind spots —
+  // they are places where a dictionary is the wrong tool, because the "words"
+  // are identifiers.
+  //
+  // Not listed, because cspell already handles it: bare URLs are ignored by
+  // default. Verified — a URL of pure gibberish raises nothing.
+  "ignoreRegExpList": [
+    // Fenced code blocks (```...```). Shell commands, make targets and file
+    // paths are not English and should not be judged as English.
+    "/^\\s*```[\\s\\S]*?^\\s*```/gm",
+
+    // Inline code spans (`pre-commit run --all-files`). Same reasoning. Prose
+    // that needs checking does not belong in backticks.
+    "/`[^`\\n]+`/g",
+
+    // Markdown link/image TARGETS only — the `](...)` half. Link text stays
+    // checked, since that is prose the reader actually sees.
+    "/\\]\\([^)]*\\)/g",
+
+    // HTML comments (<!-- ... -->). Markdown has no comment syntax of its own,
+    // so these are where tool directives go — this repo's own
+    // `codespell:ignore` exemption in the README among them, which contains a
+    // deliberate typo by necessity. The reader never sees any of it, and a
+    // directive is not English. codespell still sweeps them for known typos,
+    // so a real comment with a real typo is not a blind spot.
+    "/<!--[\\s\\S]*?-->/g"
+  ],
+
+  // Project vocabulary: correctly-spelled words absent from the dictionaries.
+  // Keep sorted; cspell matching is case-insensitive here, so one entry covers
+  // both "Venv" and "venv".
+  //
+  // The list is deliberately this short. A word belongs here only if it is
+  // spelled correctly AND a reader meets it as prose; if it is really an
+  // identifier, put it in backticks instead and the dictionary stops caring.
+  // That rule is why tools named only inside code spans — `pre-commit`,
+  // `gitleaks`, `commitizen` — are absent from this list without being
+  // exceptions to it.
+  "words": [
+    // The other spell checker, named in prose in the README. ("cspell" needs
+    // no entry — its own dictionaries know it.)
+    "codespell",
+
+    // Python packaging vocabulary, none of which cspell's dictionaries carry
+    // even though they know "python" and "pip". Prose here uses "the venv" as
+    // a noun; the directory itself is `.venv/`, in backticks, so it would be
+    // ignored either way.
+    "pyenv",
+    "venv",
+    "virtualenv"
+  ]
+}

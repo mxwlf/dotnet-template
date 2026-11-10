@@ -127,7 +127,25 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 #
 # Projects built from this template extend `ci` by adding their own build/test
 # steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
-ci: lint build analyzers-verify test coverage pack sbom ## Run the full CI check suite (what pipelines invoke)
+ci: lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
+
+# A bundle is created from already-built files; it does not build or publish them.
+# The caller supplies the version and source commit. The output must not exist.
+RELEASE_INPUT ?=
+RELEASE_OUTPUT ?= $(ARTIFACTS_DIR)/release-bundle
+RELEASE_VERSION ?=
+RELEASE_COMMIT ?=
+export RELEASE_INPUT RELEASE_OUTPUT RELEASE_VERSION RELEASE_COMMIT
+
+.PHONY: release-bundle release-bundle-verify release-bundle-test
+release-bundle: check-python ## Bundle an existing release directory and write a manifest
+	$(PYTHON) eng/scripts/release_bundle.py create --input "$$RELEASE_INPUT" --output "$$RELEASE_OUTPUT" --version "$$RELEASE_VERSION" --commit "$$RELEASE_COMMIT"
+
+release-bundle-verify: check-python ## Check the bundle payload against its manifest
+	$(PYTHON) eng/scripts/release_bundle.py verify "$$RELEASE_OUTPUT"
+
+release-bundle-test: check-python ## Test the release bundle contract
+	$(PYTHON) -m unittest discover -s tests -p 'test_release_bundle.py'
 
 # The strict analyzer default is an explicit entry per rule in
 # eng/analyzers/all-rules.globalconfig, because no bulk severity entry can switch on a rule its
@@ -476,8 +494,8 @@ PACKAGE_DIR ?= $(ARTIFACTS_DIR)/package/$(TEST_CONFIG_DIR)
 pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 	@# Emptied first so $(PACKAGE_DIR) holds exactly what THIS run produced. Without it the
 	@# directory accumulates every version ever packed locally, and the consumers of that
-	@# directory are globs: publish.yml pushes `$(PACKAGE_DIR)/*.nupkg` and attests the same
-	@# pattern, so a stale package would be published and attested alongside the intended one.
+	@# directory may be consumed by globs, so a stale package could otherwise be mistaken
+	@# for an output of the current build.
 	@# CI never saw this because a runner starts clean; a laptop does not.
 	@#
 	@# Only this configuration's directory is removed, so packing Debug does not discard a
@@ -518,9 +536,9 @@ pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 # is the resolved dependency graph, and that graph only exists inside an
 # ecosystem's resolver — here NuGet's, via the packages.lock.json files that
 # RestorePackagesWithLockFile (Directory.Build.props) keeps committed. What IS
-# portable is the contract: a `sbom` target in the `ci` chain writing into
-# $(ARTIFACTS_DIR), published by the CI stubs alongside the test and coverage
-# reports. git-template documents that contract; this file implements it.
+# portable part is the contract: an `sbom` target writing into
+# $(ARTIFACTS_DIR). A specialized template decides when to run it and how
+# to keep the inventory with its release artifact.
 #
 # Both paths below are variables because they are the project-specific part. A
 # project that publishes a real drop should point SBOM_BUILD_DROP at its
