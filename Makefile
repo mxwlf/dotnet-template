@@ -128,7 +128,10 @@ ci: security-exceptions-check lint release-bundle-test build analyzers-verify te
 .PHONY: security-exceptions-check
 security-exceptions-check: check-python ## Reject invalid or expired dependency exceptions
 	@$(PYTHON) eng/scripts/security_exceptions.py > /dev/null
+	@$(PYTHON) eng/scripts/validate_nuget_suppressions.py
 	@$(PYTHON) -m unittest discover -s tests -p test_security_exceptions.py
+	@$(PYTHON) -m unittest discover -s tests -p test_nuget_audit.py
+	@$(PYTHON) -m unittest discover -s tests -p test_nuget_suppressions.py
 
 acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
 

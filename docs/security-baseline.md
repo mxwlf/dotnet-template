@@ -12,7 +12,7 @@ the version references with full commit hashes and verify the fallback before
 applying policy.
 
 The `actions-lock` and `gitleaks` jobs run on all protected pull requests.
-After confirming they report, require them in the live rulesets. Dependency
+The committed rulesets require them; confirm they report before applying those rulesets. Dependency
 review fails on newly introduced high and critical findings; it requires the
 dependency graph and may not be available for private repositories. For private
 repositories, enable it only after validating availability by setting the
@@ -50,3 +50,37 @@ workflows, and GitHub Actions update configuration. It permits the additional
 not compare every file, check live GitHub settings, or update anything. Review
 other intentional differences separately. Select the baseline revision
 explicitly; this manual check does not automatically fetch updates or run in CI.
+
+The `baseline-drift` workflow performs the same comparison on pull requests and
+weekly against a Git template commit pinned in the workflow. To adopt upstream
+changes, review the new baseline commit, update the pin, reconcile or document
+intentional differences, regenerate the Actions lock, and submit the changes as a
+PR. This detects changes relative to the pinned revision; it does not discover
+new upstream commits automatically. Projects forked from the template should
+choose their own trusted baseline repository and commit.
+
+Record a deliberate difference in `.github/git-baseline-exceptions.json` with
+the exact reported `difference` and a nonempty `reason`; changes to that file
+are reviewed in a PR. Stale exceptions fail the check so they can be removed.
+
+## NuGet audit scope
+
+The `nuget-audit` workflow restores the solution and scans its resolved direct
+and transitive packages on PRs, `develop` pushes, and a weekly schedule. It
+fails for high or critical findings without an exception and for an incomplete or failed
+report. It uses the same validated GHSA exceptions as dependency review. The
+scan covers projects in the solution, not standalone file-based tools or local
+.NET tools; those need separate coverage. Audit-source availability and package
+source configuration affect its results.
+
+For NuGet projects, add each reviewed GHSA URL as a `NuGetAuditSuppress` item
+in `.github/nuget-audit-suppressions.props` as well as recording the exception
+in JSON. CI rejects any mismatch, duplicate, or expired exception before
+building, so the Release build and scanner use the same approved advisory IDs.
+The suppression is repository-wide and does not cover standalone file-based
+projects with their own build configuration. Direct `dotnet build` outside the
+Makefile does not validate expiry; run `make security-exceptions-check` or
+`make ci` to enforce it. Do not suppress audit warnings globally.
+
+The committed rulesets also require `baseline-drift` and `nuget-audit`.
+Confirm both report successfully before applying them to a live branch.

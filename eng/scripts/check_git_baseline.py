@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compare selected shared settings with a reviewed git-template checkout."""
 import argparse
+import json
 import sys
 from pathlib import Path
 import yaml
@@ -39,8 +40,25 @@ def main():
         return matches[0]
     if actions_config(baseline) != actions_config(root):
         errors.append(f'GitHub Actions update settings differ: {path}')
-    if errors:
-        print('\n'.join(errors), file=sys.stderr)
+    exceptions = json.loads((root / '.github/git-baseline-exceptions.json').read_text(encoding='utf-8'))
+    if not isinstance(exceptions, list):
+        raise ValueError('baseline exceptions must be a list')
+    allowed = {}
+    for item in exceptions:
+        if (not isinstance(item, dict) or set(item) != {'difference', 'reason'}
+                or not isinstance(item['difference'], str) or not item['difference'].strip()
+                or not isinstance(item['reason'], str) or not item['reason'].strip()
+                or item['difference'] in allowed):
+            raise ValueError('each baseline exception requires a unique difference and reason')
+        allowed[item['difference']] = item['reason']
+    unmatched = [entry for entry in allowed if entry not in errors]
+    if unmatched:
+        errors.extend('unused baseline exception: ' + entry for entry in unmatched)
+    remaining = [error for error in errors if error not in allowed]
+    for difference in allowed:
+        print(f'Accepted difference: {difference} — {allowed[difference]}')
+    if remaining:
+        print('\n'.join(remaining), file=sys.stderr)
         return 1
     print('Selected shared Git baseline settings match.')
     return 0
