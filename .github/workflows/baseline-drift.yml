@@ -1,0 +1,53 @@
+name: Git baseline drift
+on:
+  pull_request:
+    branches: [develop, main]
+  schedule:
+    - cron: "43 5 * * 3"
+permissions:
+  contents: read
+jobs:
+  baseline-drift:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-python@v7.1.0
+        with:
+          python-version: "3.14"
+      # Deliberately pinned to the reviewed Git template security-baseline commit.
+      # Advance in a reviewed PR after the baseline changes. Do not use a moving tag.
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: mxwlf/git-template
+          ref: 3908f4695cd430feece9ac4c44ab7e3fd8d18c07
+          path: .baseline/git-template
+          persist-credentials: false
+      - name: Install the project's pinned hook tooling
+        run: make venv
+      - name: Compare selected shared configuration
+        run: .venv/bin/python eng/scripts/check_git_baseline.py --baseline .baseline/git-template
+  baseline-update-available:
+    # Report upstream changes without making every PR depend on a moving ref.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: mxwlf/git-template
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check for upstream changes in the compared settings
+        run: |
+          pinned=3908f4695cd430feece9ac4c44ab7e3fd8d18c07
+          git cat-file -e "$pinned^{commit}" || {
+            echo '::error::Pinned baseline is not in upstream main history.'
+            exit 1
+          }
+          git diff --exit-code "$pinned" HEAD -- \
+            .pre-commit-config.yaml .github/workflows/actions-lock.yml \
+            .github/workflows/security.yml .github/dependabot.yml \
+            scripts/security_exceptions.py || {
+            echo '::error::Upstream baseline changed; review and update the pinned revision.'
+            exit 1
+          }

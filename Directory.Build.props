@@ -1,4 +1,6 @@
 <Project>
+  <!-- Scoped advisory suppressions are validated against dated review records in CI. -->
+  <Import Project="$(MSBuildThisFileDirectory).github/nuget-audit-suppressions.props" />
   <PropertyGroup>
     <!-- The one place to change which frameworks everything targets. Use a `;`-separated list to
          multi-target: `net10.0;net9.0`. -->
@@ -31,6 +33,9 @@
     <TargetFramework Condition="'$(TargetFramework)' == '' and '$(TargetFrameworks)' == '' and '$(LibraryTargetFrameworks)' != '' and !$(LibraryTargetFrameworks.Contains(';'))">$(LibraryTargetFrameworks)</TargetFramework>
     <TargetFrameworks Condition="'$(TargetFramework)' == '' and '$(TargetFrameworks)' == ''">$(LibraryTargetFrameworks)</TargetFrameworks>
 
+    <!-- Audit direct and transitive dependencies at the agreed threshold. -->
+    <NuGetAuditLevel>high</NuGetAuditLevel>
+    <NuGetAuditMode>all</NuGetAuditMode>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AnalysisLevel>latest</AnalysisLevel>

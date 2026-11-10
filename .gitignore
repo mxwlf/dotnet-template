@@ -471,3 +471,6 @@ logs/
 # Lock files (keep language-specific ones if desired)
 # package-lock.json  # uncomment to ignore npm lock file
 # yarn.lock          # uncomment to ignore Yarn lock file
+
+# Local checkout of the reviewed Git template for baseline comparison
+.baseline/

@@ -1,0 +1,18 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      routine:
+        patterns: ["*"]
+        update-types: [minor, patch]
+  - package-ecosystem: nuget
+    directories: ["/", "/src/**", "/test/**", "/eng/**"]
+    schedule:
+      interval: weekly
+    groups:
+      routine:
+        patterns: ["*"]
+        update-types: [minor, patch]

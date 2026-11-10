@@ -94,3 +94,5 @@ protected pull request before applying those requirements.
 
 [MIT](LICENSE). Update project-specific package metadata and copyright details
 when adapting the example to another project.
+
+Security onboarding and exception handling are documented in [the security baseline](docs/security-baseline.md).

@@ -48,14 +48,14 @@ jobs:
       # it needs that history present. The action's default is a depth-1 shallow clone, which has no
       # history to count — and this matters *because* version.json exists: before it did, no height
       # was computed and a shallow clone was harmless.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
 
       # Interpreter used to build .venv. Any version >= 3.10 works (see
       # MIN_PYTHON in the Makefile); it is pinned here only for reproducible
       # runs, not because the hooks need this exact version.
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.14"
 
@@ -80,7 +80,7 @@ jobs:
       # The tool manifest is hashed alongside them because `make coverage` restores
       # the pinned local tools into that same folder, and nothing else in the key
       # moves when a tool version is bumped.
-      - uses: actions/setup-dotnet@v6
+      - uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: global.json
           cache: true
@@ -90,7 +90,7 @@ jobs:
 
       # Cache pre-commit hook environments keyed on the config so unchanged
       # hooks are not rebuilt on every run.
-      - uses: actions/cache@v6
+      - uses: actions/cache@v6.1.0
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -108,7 +108,7 @@ jobs:
       # precisely the one whose outcome the next run needs; and a save is rejected when its key
       # already exists, so the key has to move every run. Hence the rolling run_id key paired with a
       # prefix restore-key, which resolves to the most recent earlier snapshot.
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@v6.1.0
         with:
           path: artifacts/test-history
           key: gh-test-history-${{ runner.os }}-${{ github.run_id }}
@@ -130,7 +130,7 @@ jobs:
       # token, not the GITHUB_TOKEN scoped at the top of this file. The Html report inside the zip is
       # browsable only after downloading; serving it in place would mean GitHub Pages, which is a
       # publishing decision this template does not make for its consumers.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: ci-reports
@@ -147,7 +147,7 @@ jobs:
       # continue-on-error, because the snapshot is a nicety in a job summary and must never be the
       # thing that fails a build — it is legitimately absent when `make acceptance` stopped in `lint`, before
       # any test ran.
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@v6.1.0
         if: always()
         continue-on-error: true
         with:

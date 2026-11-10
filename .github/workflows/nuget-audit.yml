@@ -1,0 +1,26 @@
+name: NuGet audit
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop]
+  schedule:
+    - cron: "23 4 * * 1"
+permissions:
+  contents: read
+jobs:
+  nuget-audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6.1.0
+        with:
+          global-json-file: global.json
+      - name: Validate exception metadata and NuGet suppressions
+        run: python3 eng/scripts/validate_nuget_suppressions.py
+      - name: Restore solution
+        run: dotnet restore
+      - name: Audit resolved direct and transitive packages
+        run: python3 eng/scripts/nuget_audit.py

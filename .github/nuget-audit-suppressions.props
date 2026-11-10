@@ -1,0 +1,4 @@
+<Project>
+  <!-- Only advisory URLs approved in security-exceptions.json belong here. -->
+  <ItemGroup />
+</Project>
