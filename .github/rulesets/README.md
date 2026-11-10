@@ -14,51 +14,31 @@ which talks to `/repos/{owner}/{repo}/rulesets` via `gh api`. The `gh ruleset`
 command group is read-only (`check`, `list`, `view`), so it cannot do this.
 
 This file covers how the rules are *stored and rebuilt*. For the day-to-day
-workflow they impose — how a change actually reaches `main` — see
+workflow they impose — how a change reaches `develop` — see
 [Branch protection](../../README.md#branch-protection).
 
 ## What the shipped rulesets enforce
 
-`protect-main` is the only ruleset here, because the workflow is
-**trunk-based**: `main` is the sole long-lived branch, and everything else is a
-short-lived branch that exists only long enough to carry one pull request. There
-is no `develop` stepping stone, so there is nothing else to protect — a feature
-branch needs no rules, since it cannot reach `main` except through a reviewed,
-CI-gated pull request.
+The integration branch is `develop`; `main` is intended to record the promoted
+source commit. Create `develop` before applying `develop-protection`. Both
+rulesets block deletion and force pushes, require a PR, one approval, resolved
+review threads, an up-to-date branch and the `ci` check. They permit merge
+commits and allow a repository admin to bypass the rules within a PR. That
+bypass includes failing checks, so it is not a hard gate for a sole maintainer.
 
-| `protect-main` | |
-| --- | --- |
-| Enforcement | `active` |
-| Direct pushes | blocked — pull request required, from any branch |
-| Required check | `ci` (GitHub Actions) |
-| Branch must be up to date | yes |
-| Approvals | 1, admins may bypass in a PR |
-| Merge methods | merge commits only (see below) |
-| Signed commits | required |
-| Force push / deletion | blocked |
+`protect-main` also requires signed commits and blocks branch creation.
+`develop-protection` omits those two rules: a release tool may create unsigned
+commits, and the integration branch must be created before protection is applied.
+The policy on signatures can be tightened if the selected automation supports it.
 
-Three consequences worth knowing before you enable this on a project:
+The shipped rulesets do not grant an automation identity permission to update
+`main`. A project implementing promotion must explicitly configure and review
+that authority, or use a reviewed alternative. A bypass may skip the full
+ruleset, including signature checks; only a verified, successfully promoted
+candidate should be recorded. See the [integration and release baseline](../../docs/integration-release.md).
 
-- **Merges must happen through GitHub.** Direct pushes to `main` are blocked, and
-  `required_signatures` means whatever lands there must be signed. GitHub signs
-  the merge commit it creates, which satisfies the rule. A local push will be
-  rejected.
-- **The merge method is a merge commit, chosen to preserve authorship.** A merge
-  commit adds one new object and leaves the branch's own commits untouched, so
-  each keeps the signature its author made. Squash and rebase both rewrite
-  history: a squash collapses the branch into one new GitHub-signed commit, and a
-  rebase rewrites every commit — which *discards* the author's signature, leaving
-  GitHub nothing to re-sign with. Listing `rebase` alongside
-  `required_signatures` yields a merge button that always fails with *"Base
-  branch requires signed commits. Rebase merges cannot be automatically signed by
-  GitHub."* The cost of merge commits is that `main` is not linear; that is the
-  deliberate trade for keeping author signatures in the history.
-- **The admin bypass is real.** `bypass_mode: "pull_request"` lets an admin merge
-  a pull request whose `ci` check is red. It prevents an accidental merge, not a
-  deliberate one. Remove the `bypass_actors` entry if you want the check to be
-  absolute — but on a single-maintainer repo that also makes
-  `required_approving_review_count: 1` unsatisfiable, since you cannot approve
-  your own pull request.
+Merge commits preserve authors' branch commits and their signatures. The
+repository must also permit merge commits; the ruleset cannot enable them.
 
 ## The ruleset cannot enable a merge method the repository forbids
 

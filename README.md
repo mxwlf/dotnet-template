@@ -23,7 +23,9 @@ make ci
 and configures the Git hooks. `make ci` runs the common hooks, release-bundle
 checks, a Release build with analyzers, analyzer configuration verification,
 tests, and the coverage gate. GitHub Actions and Azure DevOps call the same
-entry point. A full Git history is needed for versioning.
+entry point for PRs. Pushes to `develop` run `make acceptance`, which initially
+executes the same checks and can be extended independently. A full Git history
+is needed for versioning.
 
 `make help` lists the targets. `make deepclean` removes generated build and
 test output as well as the local virtual environment. The common hooks include secret detection,
@@ -52,6 +54,15 @@ uploads the raw reports; Azure DevOps displays them in its test and coverage
 views. Packaging and SBOM generation are optional targets, not foundation CI
 requirements.
 
+## Integration and release phases
+
+PRs into `develop` run `make ci`. Each `develop` push runs `make acceptance` on
+the integrated commit. The [integration baseline](docs/integration-release.md)
+defines the shared phase names and the golden-release contract. `candidate`,
+`candidate-acceptance`, `release`, `publish`, and `record-release` are reserved
+targets that fail until a downstream project implements them. The bundle tool
+alone does not implement any of those phases or prove acceptance or provenance.
+
 ## Release contract
 
 See [the release contract](docs/release-contract.md) for the shared bundle,
@@ -70,8 +81,11 @@ contents of multiple packages or an application deployment.
 ## Branch protection
 
 The committed [`protect-main` ruleset](.github/rulesets/protect-main.json)
-targets `main` and requires the `ci` job, matching the CI trigger. It is not
-applied automatically. See the [ruleset guide](.github/rulesets/README.md) for
+and [`develop-protection` ruleset](.github/rulesets/develop-protection.json)
+require the `ci` job on their respective branches. Create `develop` and confirm
+PR checks report before applying either ruleset. They are not applied
+automatically; a future promotion process needs explicitly configured authority
+to advance `main`. See the [ruleset guide](.github/rulesets/README.md) for
 setup, admin bypass, merge method, and portability details. A project adding
 required security checks must ensure they are configured and run on every
 protected pull request before applying those requirements.
