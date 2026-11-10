@@ -1,1 +1,6 @@
-[]
+[
+  {
+    "difference": "pre-commit configuration differs: https://github.com/pre-commit/pre-commit-hooks",
+    "reason": "end-of-file-fixer excludes packages.lock.json and .config/dotnet-tools.json, which the .NET SDK writes without a final newline. git-template has no .NET lock files, so the hook and the SDK only disagree here and the exclude does not belong upstream."
+  }
+]
