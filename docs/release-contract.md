@@ -38,6 +38,23 @@ verify provenance, manage credentials, and handle destinations that transform
 artifacts. For example, nuget.org's repository signature changes package bytes
 on upload, so the served file's digest differs from the built file's digest.
 
-`eng/scripts/release_bundle.py` is a local building block. There is no active
-release workflow, remote publishing, or automatic template synchronization in
-this foundation yet.
+## Verify an accepted candidate
+
+The example workflow stores the candidate and its acceptance evidence as
+separate GitHub Actions artifacts with 30-day retention. A failed candidate
+check leaves the bundle available for inspection without an acceptance record.
+Treat the repository, workflow, run, attempt, and artifact IDs as part of the
+trusted record. For a release or promotion, retrieve both artifacts from the
+same successful protected `develop` run and verify the selected source and
+version. A longer-lived release store must preserve that link.
+
+```sh
+make verify-accepted-candidate RELEASE_OUTPUT=path/to/downloaded/bundle \
+  RELEASE_EVIDENCE=path/to/candidate-acceptance.json \
+  RELEASE_VERSION=1.2.3 RELEASE_COMMIT="$EXPECTED_COMMIT"
+```
+
+The verifier compares the complete payload to its manifest and requires the
+acceptance evidence to match the manifest digest, commit, and version. The
+evidence is unsigned. Establish its origin through the trusted workflow before
+using it. The template's example package is an internal workflow artifact.

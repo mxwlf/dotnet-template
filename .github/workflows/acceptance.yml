@@ -1,24 +1,5 @@
-# ---------------------------------------------------------------------------
-# GitHub Actions CI — THIN WRAPPER
-# ---------------------------------------------------------------------------
-# This workflow deliberately contains no build logic. It only:
-#   1. checks out the code,
-#   2. provides a Python interpreter,
-#   3. runs `make acceptance`.
-#
-# `make acceptance` builds the repo-local virtualenv (.venv/) from that interpreter and
-# installs the pinned `pre-commit` from requirements-dev.txt into it, exactly as
-# a developer's `make setup` does — so there is nothing to install globally here.
-#
-# All actual checks live in the Makefile (`make acceptance`) and run identically on a
-# developer laptop. To change WHAT runs in CI, edit the Makefile and
-# .pre-commit-config.yaml — not this file. The only things that belong here are
-# platform-specific concerns that cannot live in a portable script: triggers,
-# the runner image, and prerequisite installation.
-#
-# Determinism: tool versions are pinned (Python below; `pre-commit` in
-# requirements-dev.txt; hook versions via `rev` in .pre-commit-config.yaml).
-# Bump them deliberately.
+# Validate the integrated commit and retain an example candidate plus its evidence.
+# Build and acceptance commands are defined in the Makefile.
 name: acceptance
 
 on:
@@ -115,7 +96,30 @@ jobs:
           restore-keys: gh-test-history-${{ runner.os }}-
 
       # Post-integration acceptance; do not cancel runs for earlier commits.
-      - run: make acceptance
+      - name: Validate the source and build the candidate
+        run: make acceptance candidate
+
+      - name: Audit resolved NuGet dependencies
+        run: python3 eng/scripts/nuget_audit.py
+
+      - name: Store the immutable candidate
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: candidate-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/release-bundle/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Test the candidate
+        run: make candidate-acceptance
+
+      - name: Store acceptance evidence
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: candidate-acceptance-${{ github.sha }}-${{ github.run_attempt }}
+          path: artifacts/candidate-acceptance.json
+          if-no-files-found: error
+          retention-days: 30
 
       # What the reporter writes to the job summary is a rendering; these are the files. The TRX report
       # and the merged Cobertura report otherwise live and die on the runner, since artifacts/ is

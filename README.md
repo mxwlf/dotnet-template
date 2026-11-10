@@ -23,8 +23,8 @@ make ci
 and configures the Git hooks. `make ci` runs the common hooks, release-bundle
 checks, a Release build with analyzers, analyzer configuration verification,
 tests, and the coverage gate. GitHub Actions and Azure DevOps call the same
-entry point for PRs. Pushes to `develop` run `make acceptance`, which initially
-executes the same checks and can be extended independently. A full Git history
+entry point for PRs. Pushes to `develop` run `make acceptance`, which starts
+with the same checks and can be extended independently. A full Git history
 is needed for versioning.
 
 `make help` lists the targets. `make deepclean` removes generated build and
@@ -56,12 +56,11 @@ requirements.
 
 ## Integration and release phases
 
-PRs into `develop` run `make ci`. Each `develop` push runs `make acceptance` on
-the integrated commit. The [integration baseline](docs/integration-release.md)
-defines the shared phase names and the golden-release contract. `candidate`,
-`candidate-acceptance`, `release`, `publish`, and `record-release` are reserved
-targets that fail until a downstream project implements them. The bundle tool
-alone does not implement any of those phases or prove acceptance or provenance.
+PRs into `develop` run `make ci`. Each `develop` push runs `make acceptance`
+on the integrated commit, builds an example candidate, and records evidence
+after the package check passes. The [integration baseline](docs/integration-release.md)
+defines the shared phase names and the golden-release contract. The `release`,
+`publish`, and `record-release` targets are reserved for downstream projects.
 
 ## Release contract
 

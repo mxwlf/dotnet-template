@@ -115,7 +115,8 @@ jobs:
           restore-keys: gh-test-history-${{ runner.os }}-
 
       # The single entrypoint. Everything CI does is defined in the Makefile.
-      - run: make ci
+      - run: make ci candidate
+      - run: make candidate-acceptance
 
       # What the reporter writes to the job summary is a rendering; these are the files. The TRX report
       # and the merged Cobertura report otherwise live and die on the runner, since artifacts/ is

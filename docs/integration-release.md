@@ -25,10 +25,12 @@
    successful promotion and destination-specific verification should `main`
    advance to the source commit represented by the promoted artifact.
 
-The .NET foundation implements steps 1 and 2 only. It does not ship a product,
-create candidates or releases, publish packages, deploy services, or advance
-`main`. A derived project must implement steps 3–5 and explicitly connect each
-gate. Neither a `develop` push nor a green acceptance result is a release.
+The .NET foundation exercises steps 1–4 using the example package. A push
+to `develop` runs source acceptance, packs the already-built assembly, and audits resolved NuGet
+dependencies before uploading the versioned bundle. Candidate acceptance reads the package and checks
+that it contains the assembly that passed the source tests. The workflow
+uploads separate acceptance evidence only after the candidate check succeeds.
+The template creates no GitHub Release and performs no promotion.
 
 A candidate may be stored in a draft release or another durable candidate
 store while testing. The chosen mechanism must prevent mutation or detect and
@@ -73,12 +75,11 @@ is not evidence of a passed gate.
 | `publish` | Promote the verified release to the destination, such as a package registry or production environment. |
 | `record-release` | After successful promotion, record the released source on `main` or report why recording failed. |
 
-`ci` and `acceptance` are implemented in this foundation. The remaining targets
-are reserved placeholders that fail with a clear message until a downstream
-project replaces their recipes; they must never report an unimplemented phase
-as successful. The placeholders do not trigger or chain release operations.
-Downstream implementations and pipeline jobs must explicitly connect and
-verify the relevant commit, version, artifact digest, provenance, and results.
+`ci`, `acceptance`, `candidate`, and `candidate-acceptance` are implemented.
+A downstream repository replaces the example package and its check. It connects
+`release`, `publish`, and `record-release` to its own release process. These
+three targets fail until implemented. Release and promotion must both verify
+the commit, version, artifact digest, provenance, and acceptance results.
 A failure or skipped required check must block release or promotion.
 
 ## What is shared and what varies
@@ -120,7 +121,5 @@ CI workflow. Review the repository's existing rules and merge settings before
 applying it. A required check must run on every PR into a protected branch;
 otherwise it can block all merges or provide no real gate.
 
-Security scanning, dependency updates, and Actions dependency pinning are part
-of the baseline alignment work still to be specified and validated against each
-repository's hosting and dependency ecosystem. This file does not claim those
-checks or a release pipeline are already implemented.
+Verify security scanning, dependency updates, and Actions dependency pinning
+against the hosting and dependency ecosystem of each derived repository.
