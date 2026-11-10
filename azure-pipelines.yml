@@ -4,15 +4,15 @@
 # This pipeline deliberately contains no build logic. It only:
 #   1. checks out the code,
 #   2. provides a Python interpreter,
-#   3. runs `make ci`.
+#   3. runs `make ci` for PRs or `make acceptance` after integration.
 #
 # `make ci` builds the repo-local virtualenv (.venv/) from that interpreter and
 # installs the pinned `pre-commit` from requirements-dev.txt into it, exactly as
 # a developer's `make setup` does — so there is nothing to install globally here.
 #
-# All actual checks live in the Makefile (`make ci`) and run identically on a
+# All actual checks live in the Makefile (`make ci` and `make acceptance`) and run identically on a
 # developer laptop and in GitHub Actions (.github/workflows/ci.yml). To change
-# WHAT runs in CI, edit the Makefile and .pre-commit-config.yaml — not this
+# WHAT runs in CI or acceptance, edit the Makefile and .pre-commit-config.yaml — not this
 # file. The only things that belong here are platform-specific concerns that
 # cannot live in a portable script: triggers, the agent image, and
 # prerequisite installation.
@@ -21,17 +21,17 @@
 # requirements-dev.txt; hook versions via `rev` in .pre-commit-config.yaml).
 # Bump them deliberately.
 
-# Trunk-based: `main` is the only long-lived branch. The `pr` trigger fires for a
-# pull request from any source branch; `trigger` covers `main` only, since adding
-# feature branches would build the same commits twice for no extra signal.
+# PR validation runs for both protected branches. Each develop push runs
+# acceptance. Azure Repos requires branch-policy build validation for PRs.
 trigger:
   branches:
     include:
-      - main
+      - develop
 
 pr:
   branches:
     include:
+      - develop
       - main
 
 pool:
@@ -72,9 +72,13 @@ steps:
       key: 'pre-commit | "$(Agent.OS)" | .pre-commit-config.yaml'
       path: $(HOME)/.cache/pre-commit
 
-  # The single entrypoint. Everything CI does is defined in the Makefile.
   - script: make ci
-    displayName: make ci
+    displayName: Pull request checks
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+
+  - script: make acceptance
+    displayName: Post-integration acceptance
+    condition: ne(variables['Build.Reason'], 'PullRequest')
 
   # `make ci` writes a TRX report per test module and one merged Cobertura report; these two tasks are
   # what turn them into the Tests and Code Coverage tabs on the run. Azure DevOps renders both formats

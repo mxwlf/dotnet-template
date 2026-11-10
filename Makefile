@@ -117,17 +117,34 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 	}
 
 # ---------------------------------------------------------------------------
-# CI ENTRYPOINT
+# CI AND ACCEPTANCE ENTRYPOINTS
 # ---------------------------------------------------------------------------
-# `make ci` is the SINGLE command CI/CD pipelines invoke. Both the GitHub
-# Actions workflow (.github/workflows/ci.yml) and the Azure DevOps pipeline
-# (azure-pipelines.yml) do nothing more than: check out the code, provide a
-# Python interpreter, and run `make ci`. All actual logic lives here, in-repo,
-# so it runs identically on a developer laptop and on every CI platform.
-#
-# Projects built from this template extend `ci` by adding their own build/test
-# steps (e.g. `dotnet test`, `npm test`) as dependencies or extra recipe lines.
+# PRs run `make ci`. Each push to develop runs `make acceptance` on that
+# commit. Acceptance starts with the same checks and can grow independently.
+# Candidate creation, release and publication require downstream implementations.
 ci: lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
+
+acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
+
+# Reserved release phases are deliberately not successful no-ops. A downstream
+# project replaces each recipe and connects the gates for its own artifact.
+# None depends on another by default: invoking one must not accidentally run
+# a partial release or publish. See docs/integration-release.md.
+candidate: ## Reserved: build a versioned immutable candidate
+	@echo 'candidate: not implemented for this repository' >&2; exit 2
+
+candidate-acceptance: ## Reserved: test and record the exact candidate
+	@echo 'candidate-acceptance: not implemented for this repository' >&2; exit 2
+
+release: ## Reserved: create a release from an accepted candidate
+	@echo 'release: not implemented for this repository' >&2; exit 2
+
+publish: ## Reserved: promote a verified release to its destination
+	@echo 'publish: not implemented for this repository' >&2; exit 2
+
+record-release: ## Reserved: record the successfully promoted source on main
+	@echo 'record-release: not implemented for this repository' >&2; exit 2
+
 
 # A bundle is created from already-built files; it does not build or publish them.
 # The caller supplies the version and source commit. The output must not exist.
@@ -602,7 +619,7 @@ sbom: tools pack ## Generate an SPDX 2.2 SBOM for the packages in $(PACKAGE_DIR)
 #   -pm true  parses license and supplier metadata out of the packages already
 #             on disk. Local only; no network.
 #   -li       is NOT passed. It fetches license data from the ClearlyDefined API,
-#             which would put a network call on the critical path of `make ci`
+#             which would put a network call on the SBOM generation path
 #             and make a green build depend on a third-party service.
 #   -gt       is NOT passed, so the SPDX creationInfo timestamp is the real
 #             generation time. That makes consecutive SBOMs differ by a
