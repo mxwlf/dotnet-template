@@ -37,6 +37,26 @@ repos:
         # template's own files happen to have none, but a project's will.
         args: ["--markdown-linebreak-ext=md,markdown"]
     -   id: end-of-file-fixer
+        # THE .NET SDK WRITES THESE TWO FILES AND DOES NOT END THEM WITH A
+        # NEWLINE. `dotnet restore` rewrites packages.lock.json whenever the
+        # resolved graph changes, and `dotnet tool install/update` rewrites
+        # .config/dotnet-tools.json; both leave the closing `}` as the last
+        # byte. Nothing in this repository decides that, so the hook and the
+        # SDK disagree permanently.
+        #
+        # THE FAILURE MODE THIS REPLACES: a human's commit looks clean, because
+        # this hook appends the newline on the way in, so the committed file is
+        # fixed before anyone sees it. Dependabot's updater never runs
+        # pre-commit, so its regenerated lock files arrive raw and `make ci`
+        # fails with `files were modified by this hook` on a file no human
+        # wrote and no human can keep fixed -- on every NuGet bump, forever.
+        # Dependabot cannot be taught to run the hook, and no .gitattributes
+        # setting helps: text normalisation rewrites CRLF, it cannot append a
+        # missing final newline.
+        #
+        # Named file by file rather than by extension, so a hand-written JSON
+        # file missing its final newline is still caught.
+        exclude: (^|/)(packages\.lock\.json|\.config/dotnet-tools\.json)$
     -   id: check-yaml
     -   id: check-added-large-files
     -   id: check-case-conflict
