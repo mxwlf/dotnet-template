@@ -122,7 +122,13 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 # PRs run `make ci`. Each push to develop runs `make acceptance` on that
 # commit. Acceptance starts with the same checks and can grow independently.
 # Candidate creation, release and publication require downstream implementations.
-ci: lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
+ci: security-exceptions-check lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
+
+# Validate exception metadata even when dependency review is unavailable.
+.PHONY: security-exceptions-check
+security-exceptions-check: check-python ## Reject invalid or expired dependency exceptions
+	@$(PYTHON) eng/scripts/security_exceptions.py > /dev/null
+	@$(PYTHON) -m unittest discover -s tests -p test_security_exceptions.py
 
 acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
 
