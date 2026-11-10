@@ -121,7 +121,7 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 # ---------------------------------------------------------------------------
 # PRs run `make ci`. Each push to develop runs `make acceptance` on that
 # commit. Acceptance starts with the same checks and can grow independently.
-# Candidate creation, release and publication require downstream implementations.
+# The foundation exercises candidate creation with its example package.
 ci: security-exceptions-check lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
 
 # Validate exception metadata even when dependency review is unavailable.
@@ -135,16 +135,20 @@ security-exceptions-check: check-python ## Reject invalid or expired dependency 
 
 acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
 
-# Reserved release phases are deliberately not successful no-ops. A downstream
-# project replaces each recipe and connects the gates for its own artifact.
-# None depends on another by default: invoking one must not accidentally run
-# a partial release or publish. See docs/integration-release.md.
-candidate: ## Reserved: build a versioned immutable candidate
-	@echo 'candidate: not implemented for this repository' >&2; exit 2
+# The example package reuses the build exercised by acceptance. Derived projects
+# replace the package build and smoke check with their own artifact-specific steps.
+candidate: pack tools check-python ## Bundle the versioned example package
+	@version=$$(dotnet tool run nbgv get-version -v NuGetPackageVersion) && \
+		commit=$$(git rev-parse HEAD) && \
+		$(PYTHON) eng/scripts/release_bundle.py create --input "$(PACKAGE_DIR)" \
+		--output "$$RELEASE_OUTPUT" --version "$$version" --commit "$$commit"
 
-candidate-acceptance: ## Reserved: test and record the exact candidate
-	@echo 'candidate-acceptance: not implemented for this repository' >&2; exit 2
+candidate-acceptance: check-python ## Check the packaged assembly and record acceptance
+	$(PYTHON) eng/scripts/release_bundle.py accept "$$RELEASE_OUTPUT" "$$RELEASE_EVIDENCE" \
+		$(PYTHON) eng/scripts/check_example_package.py "$$RELEASE_OUTPUT" \
+		"$(ARTIFACTS_DIR)/bin/library.example/$(TEST_CONFIG_DIR)"
 
+# Publication phases require a downstream implementation.
 release: ## Reserved: create a release from an accepted candidate
 	@echo 'release: not implemented for this repository' >&2; exit 2
 
@@ -161,14 +165,19 @@ RELEASE_INPUT ?=
 RELEASE_OUTPUT ?= $(ARTIFACTS_DIR)/release-bundle
 RELEASE_VERSION ?=
 RELEASE_COMMIT ?=
-export RELEASE_INPUT RELEASE_OUTPUT RELEASE_VERSION RELEASE_COMMIT
+RELEASE_EVIDENCE ?= $(ARTIFACTS_DIR)/candidate-acceptance.json
+export RELEASE_INPUT RELEASE_OUTPUT RELEASE_VERSION RELEASE_COMMIT RELEASE_EVIDENCE
 
-.PHONY: release-bundle release-bundle-verify release-bundle-test
+.PHONY: release-bundle release-bundle-verify release-bundle-test verify-accepted-candidate
 release-bundle: check-python ## Bundle an existing release directory and write a manifest
 	$(PYTHON) eng/scripts/release_bundle.py create --input "$$RELEASE_INPUT" --output "$$RELEASE_OUTPUT" --version "$$RELEASE_VERSION" --commit "$$RELEASE_COMMIT"
 
 release-bundle-verify: check-python ## Check the bundle payload against its manifest
 	$(PYTHON) eng/scripts/release_bundle.py verify "$$RELEASE_OUTPUT"
+
+verify-accepted-candidate: check-python ## Match a bundle to trusted evidence and expected metadata
+	$(PYTHON) eng/scripts/release_bundle.py verify-accepted "$$RELEASE_OUTPUT" "$$RELEASE_EVIDENCE" \
+		--version "$$RELEASE_VERSION" --commit "$$RELEASE_COMMIT"
 
 release-bundle-test: check-python ## Test the release bundle contract
 	$(PYTHON) -m unittest discover -s tests -p 'test_release_bundle.py'

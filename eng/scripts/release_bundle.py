@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -74,7 +75,8 @@ def verify(args):
     manifest_path = root / 'manifest.json'
     if manifest_path.is_symlink() or not manifest_path.is_file():
         raise ValueError('manifest must be a regular file')
-    manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    manifest_bytes = manifest_path.read_bytes()
+    manifest = json.loads(manifest_bytes)
     if (not isinstance(manifest, dict) or manifest.get('schema_version') != 1
             or not isinstance(manifest.get('version'), str) or not manifest['version'].strip()
             or not isinstance(manifest.get('source_commit'), str) or not manifest['source_commit'].strip()):
@@ -83,7 +85,35 @@ def verify(args):
     paths = files_under(payload)
     if not paths or manifest.get('files') != describe(payload, paths):
         raise ValueError('payload does not match the manifest')
-    print(f'Verified {root}')
+    print(f'Verified {root}', flush=True)
+    return {
+        'schema_version': 1,
+        'version': manifest['version'],
+        'source_commit': manifest['source_commit'],
+        'manifest_sha256': hashlib.sha256(manifest_bytes).hexdigest(),
+    }
+
+
+def accept(args):
+    if args.evidence.resolve().is_relative_to(args.bundle.resolve()):
+        raise ValueError('acceptance evidence must be outside the bundle')
+    identity = verify(args)
+    subprocess.run(args.check, check=True)
+    if verify(args) != identity:
+        raise ValueError('bundle changed during candidate acceptance')
+    args.evidence.parent.mkdir(parents=True, exist_ok=True)
+    with args.evidence.open('x', encoding='utf-8') as stream:
+        json.dump(identity, stream, indent=2)
+        stream.write('\n')
+
+
+def verify_accepted(args):
+    identity = verify(args)
+    if identity['source_commit'] != args.commit or identity['version'] != args.version:
+        raise ValueError('candidate does not match the expected source commit and version')
+    if json.loads(args.evidence.read_bytes()) != identity:
+        raise ValueError('candidate does not match acceptance evidence')
+
 
 
 def main():
@@ -98,10 +128,24 @@ def main():
     check = commands.add_parser('verify')
     check.add_argument('bundle', type=Path)
     check.set_defaults(run=verify)
+    accepted = commands.add_parser('accept')
+    accepted.add_argument('bundle', type=Path)
+    accepted.add_argument('evidence', type=Path)
+    accepted.add_argument('check', nargs=argparse.REMAINDER)
+    accepted.set_defaults(run=accept)
+    gate = commands.add_parser('verify-accepted')
+    gate.add_argument('bundle', type=Path)
+    gate.add_argument('evidence', type=Path)
+    gate.add_argument('--version', required=True)
+    gate.add_argument('--commit', required=True)
+    gate.set_defaults(run=verify_accepted)
     args = parser.parse_args()
+    if args.command == 'accept' and not args.check:
+        parser.error('accept requires a candidate test command')
+
     try:
         args.run(args)
-    except (OSError, ValueError, json.JSONDecodeError) as error:
+    except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f'release bundle: {error}', file=sys.stderr)
         return 1
     return 0
