@@ -81,6 +81,24 @@ actually runs on a pull request.
 a path or branch filter, its checks stay pending forever rather than passing.
 Either way, a required check is only worth anything if it genuinely runs.)
 
+## Roll out changes to `main`
+
+Preview the change before applying it. Check that the named required jobs
+report on a pull request targeting `main` before enforcing new requirements.
+
+```sh
+make rulesets-diff RULESET=protect-main
+make rulesets-apply RULESET=protect-main
+make rulesets-diff RULESET=protect-main
+```
+
+For `mxwlf/dotnet-template`, the [repository-specific definition](repositories/mxwlf/dotnet-template/protect-main.json)
+preserves the existing CodeQL and code-quality gates. Diff, apply, and export
+use that file for this repository. Other repositories use the portable rules
+unless they provide their own definition under `repositories/OWNER/REPO/`
+with the same filename and ruleset name. Add code-scanning requirements only
+after configuring the corresponding scans.
+
 ## What is portable between repositories
 
 These files are meant to be copied into repos created from this template, so
