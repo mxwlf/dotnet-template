@@ -66,7 +66,7 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./eng/scripts/github-rulesets.sh
 
-.PHONY: setup venv ci lint pre-commit clean deepclean check-python check-dotnet help tools build test coverage pack sbom prune-stale-output \
+.PHONY: setup venv ci lint pre-commit clean deepclean check-python check-dotnet help tools build test coverage pack sbom example-sbom prune-stale-output \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
@@ -497,72 +497,48 @@ pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 # ---------------------------------------------------------------------------
 # SBOM
 # ---------------------------------------------------------------------------
-# Generates an SPDX 2.2 SBOM with Microsoft's sbom-tool, pinned in
-# .config/dotnet-tools.json like every other local tool.
-#
-# WHY THIS TARGET IS .NET-SPECIFIC WHILE ITS CONTRACT IS NOT: an SBOM's substance
-# is the resolved dependency graph, and that graph only exists inside an
-# ecosystem's resolver — here NuGet's, via the packages.lock.json files that
-# RestorePackagesWithLockFile (Directory.Build.props) keeps committed. What IS
-# portable part is the contract: an `sbom` target writing into
-# $(ARTIFACTS_DIR). A specialized template decides when to run it and how
-# to keep the inventory with its release artifact.
-#
-# Both paths below are variables because they are the project-specific part. A
-# project that publishes a real drop should point SBOM_BUILD_DROP at its
-# `dotnet publish` output rather than the whole bin tree.
+# Inventory an already-built deliverable and its resolved build dependencies.
 SBOM_DIR ?= $(ARTIFACTS_DIR)/sbom
+SBOM_BUILD_DROP ?=
+SBOM_PROJECT ?=
+SBOM_COMPONENT_PATH ?= $(if $(SBOM_PROJECT),$(ARTIFACTS_DIR)/obj/$(SBOM_PROJECT))
+SBOM_PACKAGE_NAME ?=
+SBOM_PACKAGE_VERSION ?=
+SBOM_PACKAGE_SUPPLIER ?=
+SBOM_NAMESPACE_BASE ?=
+export SBOM_DIR SBOM_BUILD_DROP SBOM_COMPONENT_PATH SBOM_PACKAGE_NAME
+export SBOM_PACKAGE_VERSION SBOM_PACKAGE_SUPPLIER SBOM_NAMESPACE_BASE
 
-# The files the SBOM inventories: the packages that actually ship. Before `pack` existed this
-# pointed at $(ARTIFACTS_DIR)/bin, where 328 of 336 files belonged to the test project's output —
-# an inventory overwhelmingly describing test infrastructure rather than the artifact.
-SBOM_BUILD_DROP ?= $(PACKAGE_DIR)
-
-# Where sbom-tool looks for dependencies. This must point at project.assets.json,
-# NOT at the source tree: assets.json is the file NuGet writes the *resolved*
-# graph into, and it is what component detection reads. Pointing this at `src`
-# finds nothing at all — it silently produces an SBOM with zero packages, because
-# UseArtifactsOutput (Directory.Build.props) relocates obj/ out of the project
-# directories and into $(ARTIFACTS_DIR)/obj.
-#
-# Two things about the default scope are worth knowing, because both are
-# properties of assets-based detection rather than mistakes to fix:
-#
-#   * It is scoped to $(SBOM_PROJECT), the project that ships. Pointing it at
-#     $(ARTIFACTS_DIR)/obj instead would cover every project built and pull in
-#     test-only packages — 46 rather than the 12 the library resolves. A solution
-#     with several packable projects wants one SBOM per package, so override both
-#     $(SBOM_PROJECT) and $(SBOM_BUILD_DROP) per invocation.
-#   * Analyzers and build-time-only packages (SonarAnalyzer, Roslynator,
-#     SourceLink, Nerdbank.GitVersioning ...) are included even though they are
-#     `PrivateAssets` and ship nothing. They are genuine PackageReferences in
-#     assets.json, and detection cannot tell a compile-time dependency from a
-#     runtime one. Treat the result as "what this build consumed", which is the
-#     honest reading, rather than "what the artifact contains".
-SBOM_PROJECT ?= library.example
-SBOM_COMPONENT_PATH ?= $(ARTIFACTS_DIR)/obj/$(SBOM_PROJECT)
-
-SBOM_PACKAGE_NAME ?= $(basename $(SOLUTION))
-SBOM_PACKAGE_SUPPLIER ?= mxwlf
-SBOM_NAMESPACE_BASE ?= https://github.com/mxwlf/dotnet-template
-
-sbom: tools pack ## Generate an SPDX 2.2 SBOM for the packages in $(PACKAGE_DIR) into $(SBOM_DIR)
+sbom: tools ## Generate an SPDX 2.2 SBOM for an existing, explicitly scoped deliverable
 	@set -e; \
-	version="$$(dotnet nbgv get-version --variable SemVer2)"; \
-	echo "make: SBOM for $(SBOM_PACKAGE_NAME) $$version"; \
-	mkdir -p "$(SBOM_DIR)"; \
+	test -n "$$SBOM_BUILD_DROP" && test -d "$$SBOM_BUILD_DROP" && \
+		test -n "$$(find "$$SBOM_BUILD_DROP" -type f -print -quit)" || \
+		{ echo 'make: set SBOM_BUILD_DROP to a non-empty deliverable directory.' >&2; exit 1; }; \
+	test -n "$$SBOM_COMPONENT_PATH" && test -f "$$SBOM_COMPONENT_PATH/project.assets.json" || \
+		{ echo 'make: set SBOM_PROJECT or SBOM_COMPONENT_PATH to select a restored project.' >&2; exit 1; }; \
+	test -n "$$SBOM_PACKAGE_NAME" && test -n "$$SBOM_PACKAGE_VERSION" && \
+		test -n "$$SBOM_PACKAGE_SUPPLIER" && test -n "$$SBOM_NAMESPACE_BASE" || \
+		{ echo 'make: set the SBOM package name, version, supplier, and namespace base.' >&2; exit 1; }
+	mkdir -p "$$SBOM_DIR"
 	dotnet sbom-tool generate \
-		-b "$(SBOM_BUILD_DROP)" \
-		-bc "$(SBOM_COMPONENT_PATH)" \
-		-m "$(SBOM_DIR)" \
-		-pn "$(SBOM_PACKAGE_NAME)" \
-		-pv "$$version" \
-		-ps "$(SBOM_PACKAGE_SUPPLIER)" \
-		-nsb "$(SBOM_NAMESPACE_BASE)" \
+		-b "$$SBOM_BUILD_DROP" \
+		-bc "$$SBOM_COMPONENT_PATH" \
+		-m "$$SBOM_DIR" \
+		-pn "$$SBOM_PACKAGE_NAME" \
+		-pv "$$SBOM_PACKAGE_VERSION" \
+		-ps "$$SBOM_PACKAGE_SUPPLIER" \
+		-nsb "$$SBOM_NAMESPACE_BASE" \
 		-mi SPDX:2.2 \
 		-D true \
 		-pm true
-	@echo "make: wrote $(SBOM_DIR)/_manifest/spdx_2.2/manifest.spdx.json"
+	@echo "make: wrote $$SBOM_DIR/_manifest/spdx_2.2/manifest.spdx.json"
+
+example-sbom: pack tools ## Build and inventory the example NuGet packages
+	@version=$$(dotnet tool run nbgv get-version -v NuGetPackageVersion) && \
+		$(MAKE) sbom SBOM_BUILD_DROP="$(PACKAGE_DIR)" \
+		SBOM_COMPONENT_PATH="$(ARTIFACTS_DIR)/obj/library.example" \
+		SBOM_PACKAGE_NAME=mxwlf.net.library.example SBOM_PACKAGE_VERSION="$$version" \
+		SBOM_PACKAGE_SUPPLIER=mxwlf SBOM_NAMESPACE_BASE=https://github.com/mxwlf/dotnet-template
 
 # Notes on the flags above, since several are deliberate omissions:
 #   -D true   deletes any previous _manifest directory, so `make sbom` is

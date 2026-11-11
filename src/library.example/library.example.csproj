@@ -21,6 +21,13 @@
          before your first tag if you are building on this template; publish.yml refuses to publish
          while it still names this template's own id from a different repository. -->
     <PackageId>mxwlf.net.library.example</PackageId>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <Authors>mxwlf</Authors>
+    <Company>mxwlf</Company>
+    <Copyright>Copyright (c) 2026 Edgar Adrian Padilla Vega</Copyright>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>
     <Description>Example library shipped by dotnet-template, a baseline .NET repository template.</Description>
     <PackageTags>dotnet;library;template</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>

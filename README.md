@@ -77,12 +77,10 @@ foundation neither publishes packages nor deploys applications. The previous
 NuGet workflow is retained as [historical reference](examples/nuget-publish.yml.reference),
 not as an enabled or ready-to-use publishing workflow.
 
-The checked-in example is packable. `make pack` builds its NuGet packages and
-`make sbom` produces an example SPDX document; neither publishes anything.
-`make sbom` is scoped by default to `library.example` and its package output.
-An adopter must configure metadata, paths, and an inventory appropriate to each
-actual deliverable. In particular, one example SBOM does not establish the
-contents of multiple packages or an application deployment.
+Run `make pack` to build the example NuGet packages and `make example-sbom`
+to inventory the example. For a derived repository, use the
+[package metadata and SBOM checklist](docs/package-metadata-sbom.md) to
+configure the package identity and the scope of each deliverable.
 
 ## Branch protection
 
