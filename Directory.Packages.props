@@ -10,10 +10,10 @@
     <!-- The `.v3` package is the xunit v3 flavour of martincostello/xunit-logging; the
          unsuffixed MartinCostello.Logging.XUnit package targets xunit v2 and does not work here. -->
     <PackageVersion Include="MartinCostello.Logging.XUnit.v3" Version="0.7.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.235" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.324" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.404" />
     <!-- Collects code coverage. This is Microsoft's first-party MTP coverage extension rather than
          coverlet.MTP, which it replaced, because it is the only one whose numbers reach the GitHub
          Actions job summary: the reporter below reads coverage from MTP itself (the platform's
@@ -24,18 +24,18 @@
          for. Unlike coverlet (MIT), this package carries the MICROSOFT .NET LIBRARY license, whose
          install-and-use grant covers designing, developing and testing applications; it is a
          test-time dependency of a non-shipping project and is never distributed. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.11.2" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
     <!-- Owns the `report-gh` switch (spelled with two leading dashes) that `make test` passes.
          Beware the similarly named `report-github`: that one belongs to the unrelated
          GitHubActionsTestLogger package and is not an alias for this one. This package also floats
          Microsoft.Testing.Platform up to 2.4.0, the lowest version it accepts. -->
-    <PackageVersion Include="Microsoft.Testing.Extensions.GitHubActionsReport" Version="2.4.0" />
-    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.GitHubActionsReport" Version="2.5.2" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.12.1" />
     <PackageVersion Include="Nerdbank.GitVersioning" Version="3.10.94" />
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="NSubstitute.Analyzers.CSharp" Version="1.0.17" />
-    <PackageVersion Include="Roslynator.Analyzers" Version="5.0.0" />
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.34.0.3385" />
+    <PackageVersion Include="Roslynator.Analyzers" Version="5.0.1" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
   </ItemGroup>
 </Project>
