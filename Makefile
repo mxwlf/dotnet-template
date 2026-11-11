@@ -306,30 +306,9 @@ check-python: ## Verify the interpreter used to build .venv is new enough
 		exit 1; \
 	}
 
-# Output directories outlive the project that produced them. `dotnet build` only ever writes; it
-# never notices that a project was deleted or renamed, so $(ARTIFACTS_DIR)/bin keeps the old
-# directory indefinitely. That is not cosmetic, because what reads that tree is a glob: `test`
-# discovers executables with $(ARTIFACTS_DIR)/bin/*.tests.*, so a deleted test project goes on being
-# run forever — passing, reporting coverage, and quietly propping up the totals. Measured on a
-# repository built from this template, right after deleting a project: 85.5% line / 81.8% branch
-# with the orphaned assembly still executing, 84.4% / 78.7% once it was pruned.
-#
-# $(TEST_RESULTS_DIR) AND $(TEST_HISTORY_DIR) HAVE THE SAME PROBLEM, THROUGH A SECOND GLOB.
-# `test` writes one `<project>.trx`, one `<project>.cobertura.xml` and one `<project>.json` per test
-# project, and `coverage` then merges "$(TEST_RESULTS_DIR)/*.cobertura.xml" — so a renamed or
-# deleted project leaves a report behind that every later run keeps merging. Renaming every test
-# project at once is what made this visible in a repository built from this template:
-# reportgenerator read 10 Cobertura files for 5 assemblies, counted every class twice under two
-# names, and printed a "does not exist (any more)" line for each source file in the stale half,
-# because those paths had moved.
-#
-# That is worse than noise. The merged total is computed over the union, and $(COVERAGE_THRESHOLDS)
-# is enforced against it, so the floor is being checked against partly fictional data — and the
-# duplicate assemblies are checked as if they were real ones.
-#
-# Pruning rather than wiping the tree, so incremental builds keep working: only directories with no
-# matching .csproj are removed. The worst case for a mistake here is a slower rebuild, never lost
-# work, because everything under $(ARTIFACTS_DIR) is generated.
+# Remove build outputs for deleted or renamed projects while keeping incremental
+# state for current projects. The test runner prunes reports using the solution's
+# actual test modules and their report names.
 prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longer exist
 	@case '$(ARTIFACTS_DIR)' in \
 		''|/*) echo 'make: refusing to prune ARTIFACTS_DIR=$(ARTIFACTS_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
@@ -345,22 +324,10 @@ prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longe
 			printf '%s\n' "$$current" | grep -qxF "$$name" \
 				|| { echo "make: pruning stale output $$dir"; rm -rf "$$dir"; }; \
 		done; \
-	done; \
-	for tree in '$(TEST_RESULTS_DIR)' '$(TEST_HISTORY_DIR)'; do \
-		case "$$tree" in \
-			''|/*) echo "make: refusing to prune '$$tree' — must be a non-empty relative path." 1>&2; exit 1 ;; \
-		esac; \
-		[ -d "$$tree" ] || continue; \
-		for file in "$$tree"/*; do \
-			[ -f "$$file" ] || continue; \
-			name=$$(basename "$$file" | sed -e 's/\.cobertura\.xml$$//' -e 's/\.trx$$//' -e 's/\.json$$//'); \
-			printf '%s\n' "$$current" | grep -qxF "$$name" \
-				|| { echo "make: pruning stale output $$file"; rm -f "$$file"; }; \
-		done; \
 	done
 
 build: check-dotnet prune-stale-output ## Build every project with analyzers enforced
-	dotnet build --configuration $(CONFIGURATION)
+	dotnet build "$(SOLUTION)" --configuration $(CONFIGURATION)
 
 # Tests run on Microsoft.Testing.Platform (opted into by the "test" section of global.json), which
 # makes every test project a self-contained executable that hosts its own test framework.
@@ -413,44 +380,12 @@ TEST_HISTORY_DIR ?= $(ARTIFACTS_DIR)/test-history
 # that go 7 days without a read, so a repo that sits idle for a week starts its history over.
 TEST_HISTORY_WINDOW_DAYS ?= 30
 
-# Test modules live at $(ARTIFACTS_DIR)/bin/<project>/<configuration>/<project>. The artifacts output
-# layout lowercases <configuration> and appends the build pivots to it, so a multi-targeted project
-# produces release_net10.0 rather than plain release — hence the trailing wildcard when globbing for
-# it. The apphost itself has no extension on Unix and .exe on Windows.
+# Packaging also uses the lowercased artifacts output configuration.
 TEST_CONFIG_DIR := $(shell printf '%s' '$(CONFIGURATION)' | tr '[:upper:]' '[:lower:]')
-TEST_EXE_EXT := $(if $(filter Windows_NT,$(OS)),.exe,)
 
-# The modules run one at a time on purpose: GitHub's ::group:: and ::endgroup:: commands are
-# sequential and anonymous, so modules running concurrently would interleave and file their output
-# under the wrong heading. Every module is run even after one fails, so a red build reports all of
-# its failures at once; the loop then exits non-zero. Finding no modules at all is itself a failure,
-# because a test target that silently runs nothing is indistinguishable from a passing one.
-test: build ## Run every test project, writing results and coverage into $(TEST_RESULTS_DIR)
-	@mkdir -p $(TEST_HISTORY_DIR); \
-	status=0; found=0; \
-	for dir in $(ARTIFACTS_DIR)/bin/*.tests.*; do \
-		name=$$(basename "$$dir"); \
-		for cfg in "$$dir"/$(TEST_CONFIG_DIR)*; do \
-			exe="$$cfg/$$name$(TEST_EXE_EXT)"; \
-			[ -x "$$exe" ] || continue; \
-			found=$$((found + 1)); \
-			echo "==> $$exe"; \
-			"$$exe" \
-				--results-directory $(TEST_RESULTS_DIR) \
-				--report-xunit-trx --report-xunit-trx-filename "$$name.trx" \
-				--report-gh \
-				--report-gh-history $(TEST_HISTORY_DIR)/$$name.json \
-				--report-gh-history-window $(TEST_HISTORY_WINDOW_DAYS) \
-				--coverage --coverage-output-format cobertura \
-				--coverage-output "$$name.cobertura.xml" || status=1; \
-		done; \
-	done; \
-	if [ "$$found" -eq 0 ]; then \
-		echo 'make: found no test executables under $(ARTIFACTS_DIR)/bin/*.tests.*/$(TEST_CONFIG_DIR)*/.' 1>&2; \
-		echo '      Check that `make build` succeeded and that CONFIGURATION=$(CONFIGURATION) is the one that was built.' 1>&2; \
-		exit 1; \
-	fi; \
-	exit $$status
+test: build check-python ## Run solution test projects, writing reports and coverage
+	$(PYTHON) eng/scripts/run_solution_tests.py "$(SOLUTION)" "$(CONFIGURATION)" \
+		"$(TEST_RESULTS_DIR)" "$(TEST_HISTORY_DIR)" "$(TEST_HISTORY_WINDOW_DAYS)"
 
 # ---------------------------------------------------------------------------
 # COVERAGE
