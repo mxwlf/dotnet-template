@@ -1,3 +1,4 @@
+#:property PublishAot=false
 #:package Microsoft.CodeAnalysis.CSharp@5.0.0
 // Regenerates eng/analyzers/all-rules.globalconfig: one explicit entry per rule, for every
 // analyzer every project in this repository loads.
@@ -11,6 +12,7 @@
 // implemented by the SDK as 281 explicit CA entries rather than one line. So "every rule on" is
 // reachable only by naming every rule, and naming ~1,300 rules by hand is not maintainable.
 //
+// This maintenance tool runs on the SDK runtime and does not need Native AOT publishing.
 // Usage, from the repository root:
 //     dotnet run eng/analyzers/sync-rules.cs             # rewrite the globalconfig
 //     dotnet run eng/analyzers/sync-rules.cs --check     # fail if it is stale (for CI)
