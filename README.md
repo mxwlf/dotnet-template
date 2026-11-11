@@ -41,8 +41,9 @@ tests staged .NET inputs at commit time; `make ci` runs those checks separately.
 - [`Directory.Packages.props`](Directory.Packages.props) and project lock files
   record package versions; [`.config/dotnet-tools.json`](.config/dotnet-tools.json)
   pins repository tools.
-- `make test` discovers test executables under `artifacts/bin/*.tests.*`.
-  Keep that naming convention when adding test projects. It writes TRX and
+- `make test` runs projects in the solution that declare `IsTestProject`.
+  Add each test project to the solution. The runner fails if an expected
+  test executable is missing. It writes TRX and
   coverage reports under `artifacts/test-results/`.
 - `make coverage` merges the reports and enforces an 80% line-coverage floor by
   default; `COVERAGE_MIN_LINE` can change it.
