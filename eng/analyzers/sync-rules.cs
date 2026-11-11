@@ -60,7 +60,7 @@ foreach (var project in projects)
     }
 }
 
-var rules = new Dictionary<string, (DiagnosticSeverity Severity, string Title, string Category, bool OnByDefault)>(StringComparer.Ordinal);
+var rules = new Dictionary<string, DiagnosticSeverity>(StringComparer.Ordinal);
 var skipped = new List<string>();
 
 foreach (var path in assemblies)
@@ -85,7 +85,7 @@ foreach (var path in assemblies)
 
         foreach (var d in instance.SupportedDiagnostics)
         {
-            rules[d.Id] = (d.DefaultSeverity, d.Title.ToString(), d.Category ?? "", d.IsEnabledByDefault);
+            rules[d.Id] = d.DefaultSeverity;
             found++;
         }
     }
@@ -107,7 +107,12 @@ if (projects.Length == 0 || assemblies.Count == 0 || rules.Count == 0)
     return 2;
 }
 
-var text = Render(rules, projects.Length, assemblies.Count, skipped);
+var text = Render(rules);
+Console.WriteLine($"Found {rules.Count} rules from {assemblies.Count} analyzer assemblies across {projects.Length} projects.");
+if (skipped.Count > 0)
+{
+    Console.WriteLine($"Assemblies contributing no C# rules: {string.Join(", ", skipped.Distinct().OrderBy(x => x, StringComparer.Ordinal))}");
+}
 
 if (check)
 {
@@ -119,8 +124,7 @@ if (check)
     }
 
     // Say WHAT differs, not just that something does. A bare "stale" costs a round trip to work
-    // out whether a package bump added rules, whether a rule changed severity, or whether only the
-    // header counts moved.
+    // out which rules or severities changed.
     Console.Error.WriteLine("all-rules.globalconfig is stale.");
 
     var committed = ParseEntries(existing);
@@ -136,10 +140,10 @@ if (check)
 
     if (committed.Count == expected.Count && !committed.Except(expected).Any())
     {
-        Console.Error.WriteLine("  the rules are identical; only the header differs.");
+        Console.Error.WriteLine("  the rule entries are identical; the generated text differs.");
     }
 
-    Console.Error.WriteLine("Run: dotnet run eng/analyzers/sync-rules.cs");
+    Console.Error.WriteLine("Run: make analyzers-sync");
     return 1;
 }
 
@@ -169,14 +173,10 @@ static void Report(string label, IEnumerable<string> items)
 }
 
 File.WriteAllText(output, text);
-Console.WriteLine($"Wrote {rules.Count} rules from {assemblies.Count} analyzer assemblies across {projects.Length} projects.");
+Console.WriteLine($"Updated {output}.");
 return 0;
 
-static string Render(
-    Dictionary<string, (DiagnosticSeverity Severity, string Title, string Category, bool OnByDefault)> rules,
-    int projectCount,
-    int assemblyCount,
-    List<string> skipped)
+static string Render(Dictionary<string, DiagnosticSeverity> rules)
 {
     var byPrefix = rules
         .GroupBy(r => new string(r.Key.TakeWhile(char.IsLetter).ToArray()))
@@ -211,24 +211,12 @@ static string Render(
 
         """);
 
-    sb.Append($"# {rules.Count} rules from {assemblyCount} analyzer assemblies across {projectCount} projects.\n");
-    if (skipped.Count > 0)
-    {
-        sb.Append("# Assemblies contributing no C# rules - source generators, and the code-fix halves of the\n");
-        sb.Append("# analyzers above, which carry the fixes rather than the diagnostics:\n");
-        foreach (var s in skipped.Distinct().OrderBy(x => x, StringComparer.Ordinal))
-        {
-            sb.Append($"#   {s}\n");
-        }
-    }
-
     foreach (var group in byPrefix)
     {
-        var onCount = group.Count(r => r.Value.OnByDefault);
-        sb.Append($"\n# {group.Key}: {group.Count()} rules ({group.Count() - onCount} of them shipped disabled by default).\n");
+        sb.Append($"\n# {group.Key}\n");
         foreach (var rule in group.OrderBy(r => r.Key, StringComparer.Ordinal))
         {
-            var severity = rule.Value.Severity == DiagnosticSeverity.Error ? "error" : "warning";
+            var severity = rule.Value == DiagnosticSeverity.Error ? "error" : "warning";
             sb.Append($"dotnet_diagnostic.{rule.Key}.severity = {severity}\n");
         }
     }
