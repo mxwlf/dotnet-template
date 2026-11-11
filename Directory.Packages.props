@@ -13,7 +13,7 @@
     <PackageVersion Include="Meziantou.Analyzer" Version="3.0.235" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
+    <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="11.0.100" />
     <!-- Collects code coverage. This is Microsoft's first-party MTP coverage extension rather than
          coverlet.MTP, which it replaced, because it is the only one whose numbers reach the GitHub
          Actions job summary: the reporter below reads coverage from MTP itself (the platform's
