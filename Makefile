@@ -207,15 +207,13 @@ analyzers-sync: check-dotnet ## Regenerate eng/analyzers/all-rules.globalconfig 
 analyzers-verify: check-dotnet ## Fail if eng/analyzers/all-rules.globalconfig is stale
 	dotnet run eng/analyzers/sync-rules.cs --check
 
-# The dotnet-build-test hook builds and tests the staged tree on `git commit`. `ci` reaches the same
-# code through its own `build` and `test` targets, so the hook is skipped here: leaving it in would
-# compile and run the whole suite twice per pipeline run. It is only skipped for `--all-files` runs
-# driven by make; `git commit` still runs it.
-LINT_SKIP_HOOKS := dotnet-build-test
+# CI runs build, test and analyzer verification directly after lint. Keep the
+# corresponding pre-commit hooks enabled for local commits and skip them here.
+LINT_SKIP_HOOKS := dotnet-build-test,dotnet-analyzers-verify
 
-lint: pre-commit ## Run the pre-commit hooks against all files (the build/test hook is left to `build` and `test`)
+lint: pre-commit ## Run the repository lint checks
 
-pre-commit: venv ## Run the pre-commit hooks against all files (the build/test hook is left to `build` and `test`)
+pre-commit: venv ## Run hooks other than the .NET checks invoked directly by CI
 	SKIP=$(LINT_SKIP_HOOKS) $(PRE_COMMIT) run --all-files --show-diff-on-failure
 
 clean: ## Remove the local virtualenv (rebuild it with `make setup`)

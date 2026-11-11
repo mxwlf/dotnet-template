@@ -54,6 +54,12 @@ uploads the raw reports; Azure DevOps displays them in its test and coverage
 views. Packaging and SBOM generation are optional targets, not foundation CI
 requirements.
 
+When a dependency or project change affects analyzer rules, run
+`make analyzers-sync` and commit the generated configuration with the change.
+The pre-commit hook verifies the staged configuration when analyzer inputs
+change. For Dependabot updates, regenerate after updating the PR from
+`develop` and rerun CI before merging.
+
 ## Integration and release phases
 
 PRs into `develop` run `make ci`. Each `develop` push runs `make acceptance`
