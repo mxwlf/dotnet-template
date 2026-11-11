@@ -22,7 +22,7 @@
 # regeneration silently reverts it.
 
 is_global = true
-# 1065 rules from 22 analyzer assemblies across 2 projects.
+# 1074 rules from 22 analyzer assemblies across 2 projects.
 # Assemblies contributing no C# rules - source generators, and the code-fix halves of the
 # analyzers above, which carry the fixes rather than the diagnostics:
 #   Meziantou.Analyzer.CodeFixers.dll
@@ -40,7 +40,7 @@ is_global = true
 #   Roslynator_Analyzers_Roslynator.Workspaces.Core.dll
 #   xunit.analyzers.fixes.dll
 
-# MA: 236 rules (60 of them shipped disabled by default).
+# MA: 241 rules (61 of them shipped disabled by default).
 dotnet_diagnostic.MA0001.severity = warning
 dotnet_diagnostic.MA0002.severity = warning
 dotnet_diagnostic.MA0003.severity = warning
@@ -250,7 +250,6 @@ dotnet_diagnostic.MA0208.severity = warning
 dotnet_diagnostic.MA0209.severity = warning
 dotnet_diagnostic.MA0210.severity = warning
 dotnet_diagnostic.MA0211.severity = warning
-dotnet_diagnostic.MA0212.severity = warning
 dotnet_diagnostic.MA0213.severity = warning
 dotnet_diagnostic.MA0214.severity = warning
 dotnet_diagnostic.MA0215.severity = warning
@@ -277,6 +276,12 @@ dotnet_diagnostic.MA0236.severity = warning
 dotnet_diagnostic.MA0237.severity = warning
 dotnet_diagnostic.MA0238.severity = warning
 dotnet_diagnostic.MA0239.severity = warning
+dotnet_diagnostic.MA0240.severity = warning
+dotnet_diagnostic.MA0241.severity = warning
+dotnet_diagnostic.MA0242.severity = warning
+dotnet_diagnostic.MA0243.severity = warning
+dotnet_diagnostic.MA0244.severity = warning
+dotnet_diagnostic.MA0245.severity = warning
 
 # NS: 27 rules (0 of them shipped disabled by default).
 dotnet_diagnostic.NS1000.severity = warning
@@ -1003,7 +1008,7 @@ dotnet_diagnostic.S9999-testMethodDeclaration.severity = warning
 dotnet_diagnostic.S9999-token-type.severity = warning
 dotnet_diagnostic.S9999-warning.severity = warning
 
-# VSTHRD: 24 rules (0 of them shipped disabled by default).
+# VSTHRD: 28 rules (0 of them shipped disabled by default).
 dotnet_diagnostic.VSTHRD001.severity = warning
 dotnet_diagnostic.VSTHRD002.severity = warning
 dotnet_diagnostic.VSTHRD003.severity = warning
@@ -1011,6 +1016,7 @@ dotnet_diagnostic.VSTHRD004.severity = error
 dotnet_diagnostic.VSTHRD010.severity = warning
 dotnet_diagnostic.VSTHRD011.severity = error
 dotnet_diagnostic.VSTHRD012.severity = warning
+dotnet_diagnostic.VSTHRD013.severity = warning
 dotnet_diagnostic.VSTHRD100.severity = warning
 dotnet_diagnostic.VSTHRD101.severity = warning
 dotnet_diagnostic.VSTHRD102.severity = warning
@@ -1027,7 +1033,10 @@ dotnet_diagnostic.VSTHRD112.severity = warning
 dotnet_diagnostic.VSTHRD113.severity = warning
 dotnet_diagnostic.VSTHRD114.severity = warning
 dotnet_diagnostic.VSTHRD115.severity = warning
+dotnet_diagnostic.VSTHRD116.severity = warning
+dotnet_diagnostic.VSTHRD117.severity = warning
 dotnet_diagnostic.VSTHRD200.severity = warning
+dotnet_diagnostic.VSTHRD202.severity = warning
 
 # xUnit: 90 rules (0 of them shipped disabled by default).
 dotnet_diagnostic.xUnit1000.severity = error
