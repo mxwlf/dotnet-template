@@ -22,7 +22,7 @@
 # regeneration silently reverts it.
 
 is_global = true
-# 1065 rules from 22 analyzer assemblies across 2 projects.
+# 1090 rules from 22 analyzer assemblies across 2 projects.
 # Assemblies contributing no C# rules - source generators, and the code-fix halves of the
 # analyzers above, which carry the fixes rather than the diagnostics:
 #   Meziantou.Analyzer.CodeFixers.dll
@@ -1029,7 +1029,7 @@ dotnet_diagnostic.VSTHRD114.severity = warning
 dotnet_diagnostic.VSTHRD115.severity = warning
 dotnet_diagnostic.VSTHRD200.severity = warning
 
-# xUnit: 90 rules (0 of them shipped disabled by default).
+# xUnit: 115 rules (0 of them shipped disabled by default).
 dotnet_diagnostic.xUnit1000.severity = error
 dotnet_diagnostic.xUnit1001.severity = error
 dotnet_diagnostic.xUnit1002.severity = error
@@ -1084,6 +1084,26 @@ dotnet_diagnostic.xUnit1050.severity = warning
 dotnet_diagnostic.xUnit1051.severity = warning
 dotnet_diagnostic.xUnit1052.severity = warning
 dotnet_diagnostic.xUnit1053.severity = warning
+dotnet_diagnostic.xUnit1054.severity = error
+dotnet_diagnostic.xUnit1055.severity = error
+dotnet_diagnostic.xUnit1056.severity = error
+dotnet_diagnostic.xUnit1057.severity = error
+dotnet_diagnostic.xUnit1058.severity = error
+dotnet_diagnostic.xUnit1059.severity = warning
+dotnet_diagnostic.xUnit1060.severity = error
+dotnet_diagnostic.xUnit1061.severity = error
+dotnet_diagnostic.xUnit1062.severity = error
+dotnet_diagnostic.xUnit1063.severity = error
+dotnet_diagnostic.xUnit1064.severity = error
+dotnet_diagnostic.xUnit1065.severity = error
+dotnet_diagnostic.xUnit1066.severity = error
+dotnet_diagnostic.xUnit1067.severity = error
+dotnet_diagnostic.xUnit1068.severity = error
+dotnet_diagnostic.xUnit1069.severity = warning
+dotnet_diagnostic.xUnit1070.severity = error
+dotnet_diagnostic.xUnit1071.severity = warning
+dotnet_diagnostic.xUnit1072.severity = warning
+dotnet_diagnostic.xUnit1073.severity = warning
 dotnet_diagnostic.xUnit2000.severity = warning
 dotnet_diagnostic.xUnit2001.severity = warning
 dotnet_diagnostic.xUnit2002.severity = warning
@@ -1116,7 +1136,12 @@ dotnet_diagnostic.xUnit2029.severity = warning
 dotnet_diagnostic.xUnit2030.severity = warning
 dotnet_diagnostic.xUnit2031.severity = warning
 dotnet_diagnostic.xUnit2032.severity = warning
+dotnet_diagnostic.xUnit2033.severity = warning
 dotnet_diagnostic.xUnit3000.severity = error
 dotnet_diagnostic.xUnit3001.severity = error
 dotnet_diagnostic.xUnit3002.severity = warning
 dotnet_diagnostic.xUnit3003.severity = warning
+dotnet_diagnostic.xUnit3004.severity = error
+dotnet_diagnostic.xUnit3005.severity = error
+dotnet_diagnostic.xUnit3006.severity = error
+dotnet_diagnostic.xUnit3007.severity = warning
