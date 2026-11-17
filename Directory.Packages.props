@@ -10,7 +10,7 @@
     <!-- The `.v3` package is the xunit v3 flavour of martincostello/xunit-logging; the
          unsuffixed MartinCostello.Logging.XUnit package targets xunit v2 and does not work here. -->
     <PackageVersion Include="MartinCostello.Logging.XUnit.v3" Version="0.7.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.324" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="3.0.341" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.15" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.404" />
@@ -35,7 +35,7 @@
     <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="NSubstitute.Analyzers.CSharp" Version="1.0.17" />
     <PackageVersion Include="Roslynator.Analyzers" Version="5.0.1" />
-    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.35.0.4138" />
+    <PackageVersion Include="SonarAnalyzer.CSharp" Version="10.36.0.15337" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.3" />
   </ItemGroup>
 </Project>
