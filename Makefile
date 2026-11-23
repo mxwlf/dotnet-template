@@ -6,15 +6,16 @@
 # Usage:
 #   make            # same as `make help`
 #   make help       # list available targets
-#   make setup      # create .venv + configure the repo's git config and hooks
+#   make setup      # reconcile branches, create .venv, and configure Git hooks
+#   make reconcile-branches  # reconcile main and develop on origin
 #   make ci         # run the full CI check suite (the command pipelines invoke)
 #   make lint       # run all pre-commit hooks against all files
 #   make clean      # remove the local virtualenv
 #
 # Requirements:
 #   - GNU make, git, and a POSIX shell (on Windows: Git Bash or WSL).
-#   - A Python interpreter >= $(MIN_PYTHON) reachable as `python3`. It is used
-#     ONLY to create the virtualenv, so it can be any install you already have
+#   - A Python interpreter >= $(MIN_PYTHON) reachable as `python3`. It runs
+#     branch reconciliation and creates the virtualenv. Use any installation
 #     (system, Homebrew, pyenv, ...). Point make at a specific one with:
 #         make setup PYTHON=/path/to/python3.12
 #
@@ -23,9 +24,10 @@
 #   installs the pinned `pre-commit` from requirements-dev.txt into it.
 #
 # How it works:
-#   `make setup` does two things:
-#     1. Builds .venv/ and installs the pinned tooling into it.
-#     2. Runs `git config --local include.path ../.gitconfig`, which makes this
+#   `make setup` runs these steps:
+#     1. Reconciles origin/main and origin/develop in fresh template clones.
+#     2. Builds .venv/ and installs the pinned tooling into it.
+#     3. Runs `git config --local include.path ../.gitconfig`, which makes this
 #        repo's local config include the committed `.gitconfig`. That in turn
 #        sets `core.hooksPath = .githooks/`, activating the committed hook
 #        scripts (pre-commit and commit-msg) without needing `pre-commit
@@ -43,8 +45,8 @@ ARTIFACTS_DIR ?= artifacts
 # ---------------------------------------------------------------------------
 # REPO-LOCAL VIRTUALENV
 # ---------------------------------------------------------------------------
-# The interpreter used only to *create* .venv. Override on the command line
-# (e.g. `make setup PYTHON=python3.12`) to build the venv from a specific one.
+# The interpreter for the setup script and .venv. Override on the command line
+# (e.g. `make setup PYTHON=python3.12`) to use a specific one.
 PYTHON ?= python3
 
 # Minimum version for the interpreter above: some hooks (commitizen,
@@ -66,15 +68,23 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./eng/scripts/github-rulesets.sh
 
-.PHONY: setup venv ci lint pre-commit clean deepclean check-python check-dotnet help tools build test coverage pack sbom example-sbom prune-stale-output \
+.PHONY: setup reconcile-branches branch-reconciliation-test \
+        venv ci lint pre-commit clean deepclean check-python check-dotnet help tools build test coverage pack sbom example-sbom prune-stale-output \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-setup: venv ## Create the local virtualenv and configure the repo's git config + hooks
+setup: reconcile-branches ## Reconcile template branches, install tooling, and configure Git hooks
+	@$(MAKE) --no-print-directory venv
 	git config --local include.path ../.gitconfig
 	$(PRE_COMMIT) install-hooks
+
+reconcile-branches: check-python ## Reconcile main and develop on origin in a fresh template clone
+	@$(PYTHON) eng/scripts/reconcile_branches.py
+
+branch-reconciliation-test: check-python ## Test branch reconciliation with local Git repositories
+	@$(PYTHON) -m unittest discover -s tests -p test_reconcile_branches.py
 
 venv: $(VENV_STAMP) ## Create/update the repo-local virtualenv (.venv) with the pinned tooling
 
@@ -122,7 +132,7 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 # PRs run `make ci`. Each push to develop runs `make acceptance` on that
 # commit. Acceptance starts with the same checks and can grow independently.
 # The foundation exercises candidate creation with its example package.
-ci: security-exceptions-check lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
+ci: security-exceptions-check branch-reconciliation-test lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
 
 # Validate exception metadata even when dependency review is unavailable.
 .PHONY: security-exceptions-check
@@ -292,7 +302,7 @@ rulesets-diff: ## Report drift between .github/rulesets/ and the live rulesets
 rulesets-export: ## Overwrite .github/rulesets/ with the live rulesets
 	$(RULESETS) export
 
-check-python: ## Verify the interpreter used to build .venv is new enough
+check-python: ## Verify the setup interpreter is new enough
 	@command -v $(PYTHON) > /dev/null 2>&1 || { \
 		echo 'Error: `$(PYTHON)` was not found on your PATH.' 1>&2; \
 		echo '       Install any Python >= $(MIN_PYTHON), or point make at one you have:' 1>&2; \

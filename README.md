@@ -12,15 +12,24 @@ specialized template decides what to build and where to distribute it.
 ## Getting started
 
 Install Git, GNU make, Python 3.10 or later, and an SDK satisfying
-[`global.json`](global.json). Then run:
+[`global.json`](global.json). Clone the repository GitHub generated from the
+template. From the clone's root, run setup before making commits or applying
+branch protection.
 
 ```sh
 make setup
 make ci
 ```
 
-`make setup` installs the pinned pre-commit tool in a repository-local `.venv`
-and configures the Git hooks. `make ci` runs the common hooks, release-bundle
+`make setup` first runs `make reconcile-branches` to establish shared history
+for `main` and `develop` on `origin`. It then installs the pinned pre-commit
+tool in a repository-local `.venv` and configures the Git hooks. See
+[branch reconciliation](docs/branch-reconciliation.md) for both GitHub template
+options, the preflight checks, and what to do if setup stops.
+
+`make reconcile-branches` runs just the branch step. Use
+`make branch-reconciliation-test` to exercise the script with temporary local
+Git repositories. `make ci` runs those tests, the common hooks, release-bundle
 checks, a Release build with analyzers, analyzer configuration verification,
 tests, and the coverage gate. GitHub Actions and Azure DevOps call the same
 entry point for PRs. Pushes to `develop` run `make acceptance`, which starts
@@ -86,8 +95,8 @@ configure the package identity and the scope of each deliverable.
 
 The committed [`protect-main` ruleset](.github/rulesets/protect-main.json)
 and [`develop-protection` ruleset](.github/rulesets/develop-protection.json)
-require the `ci` job on their respective branches. Create `develop` and confirm
-PR checks report before applying either ruleset. They are not applied
+require the `ci` job on their respective branches. Confirm both branches exist
+and PR checks report before applying either ruleset. They are not applied
 automatically; a future promotion process needs explicitly configured authority
 to advance `main`. See the [ruleset guide](.github/rulesets/README.md) for
 setup, admin bypass, merge method, and portability details. A project adding
