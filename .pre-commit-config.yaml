@@ -153,3 +153,9 @@ repos:
         language: system
         pass_filenames: false
         files: \.(cs|csproj|slnx|props|targets|json)$
+      - id: dotnet-analyzers-verify
+        name: verify generated .NET analyzer rules
+        entry: make analyzers-verify
+        language: system
+        pass_filenames: false
+        files: '(\.(csproj|slnx|sln|props|targets)$|(^|/)(packages\.lock\.json|global\.json)$|^eng/analyzers/(sync-rules\.cs|all-rules\.globalconfig)$)'

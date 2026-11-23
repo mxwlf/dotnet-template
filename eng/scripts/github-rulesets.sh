@@ -126,13 +126,24 @@ lookup_id() {
 	awk -F '\t' -v want="$1" '$1 == want { print $2 }' "$2"
 }
 
-# List the committed ruleset files, failing loudly rather than silently doing
-# nothing when there are none.
+# List the effective files, optionally limited to a single ruleset by name.
 write_file_list() {
 	[ -d "$RULESET_DIR" ] || die "$RULESET_DIR does not exist. Create it, or run: make rulesets-export"
 	set -- "$RULESET_DIR"/*.json
 	[ -e "$1" ] || die "no ruleset files in $RULESET_DIR."
-	printf '%s\n' "$@"
+	found=0
+	for file do
+		name="$(ruleset_name "$file")"
+		override="$RULESET_DIR/repositories/$repo/${file##*/}"
+		if [ -f "$override" ]; then
+			[ "$(ruleset_name "$override")" = "$name" ] || die "$override must keep the ruleset name $name."
+			file="$override"
+		fi
+		[ -z "${RULESET:-}" ] || [ "$name" = "$RULESET" ] || continue
+		printf '%s\n' "$file"
+		found=1
+	done
+	[ "$found" -eq 1 ] || die "no committed ruleset named $RULESET."
 }
 
 cmd_export() {
@@ -145,6 +156,8 @@ cmd_export() {
 		gh api "repos/$repo/rulesets/$id" > "$TMP/live.json"
 		name="$("$PYTHON" -c 'import json, sys; sys.stdout.write(json.load(open(sys.argv[1]))["name"])' "$TMP/live.json")"
 		file="$RULESET_DIR/$(slugify "$name").json"
+		override="$RULESET_DIR/repositories/$repo/${file##*/}"
+		[ ! -f "$override" ] || file="$override"
 		normalize < "$TMP/live.json" > "$file"
 		printf 'exported %s -> %s\n' "$name" "$file"
 	done

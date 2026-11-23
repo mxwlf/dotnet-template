@@ -6,15 +6,16 @@
 # Usage:
 #   make            # same as `make help`
 #   make help       # list available targets
-#   make setup      # create .venv + configure the repo's git config and hooks
+#   make setup      # reconcile branches, create .venv, and configure Git hooks
+#   make reconcile-branches  # reconcile main and develop on origin
 #   make ci         # run the full CI check suite (the command pipelines invoke)
 #   make lint       # run all pre-commit hooks against all files
 #   make clean      # remove the local virtualenv
 #
 # Requirements:
 #   - GNU make, git, and a POSIX shell (on Windows: Git Bash or WSL).
-#   - A Python interpreter >= $(MIN_PYTHON) reachable as `python3`. It is used
-#     ONLY to create the virtualenv, so it can be any install you already have
+#   - A Python interpreter >= $(MIN_PYTHON) reachable as `python3`. It runs
+#     branch reconciliation and creates the virtualenv. Use any installation
 #     (system, Homebrew, pyenv, ...). Point make at a specific one with:
 #         make setup PYTHON=/path/to/python3.12
 #
@@ -23,9 +24,10 @@
 #   installs the pinned `pre-commit` from requirements-dev.txt into it.
 #
 # How it works:
-#   `make setup` does two things:
-#     1. Builds .venv/ and installs the pinned tooling into it.
-#     2. Runs `git config --local include.path ../.gitconfig`, which makes this
+#   `make setup` runs these steps:
+#     1. Reconciles origin/main and origin/develop in fresh template clones.
+#     2. Builds .venv/ and installs the pinned tooling into it.
+#     3. Runs `git config --local include.path ../.gitconfig`, which makes this
 #        repo's local config include the committed `.gitconfig`. That in turn
 #        sets `core.hooksPath = .githooks/`, activating the committed hook
 #        scripts (pre-commit and commit-msg) without needing `pre-commit
@@ -43,8 +45,8 @@ ARTIFACTS_DIR ?= artifacts
 # ---------------------------------------------------------------------------
 # REPO-LOCAL VIRTUALENV
 # ---------------------------------------------------------------------------
-# The interpreter used only to *create* .venv. Override on the command line
-# (e.g. `make setup PYTHON=python3.12`) to build the venv from a specific one.
+# The interpreter for the setup script and .venv. Override on the command line
+# (e.g. `make setup PYTHON=python3.12`) to use a specific one.
 PYTHON ?= python3
 
 # Minimum version for the interpreter above: some hooks (commitizen,
@@ -66,15 +68,23 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./eng/scripts/github-rulesets.sh
 
-.PHONY: setup venv ci lint pre-commit clean deepclean check-python check-dotnet help tools build test coverage pack sbom prune-stale-output \
+.PHONY: setup reconcile-branches branch-reconciliation-test \
+        venv ci lint pre-commit clean deepclean check-python check-dotnet help tools build test coverage pack sbom example-sbom prune-stale-output \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-setup: venv ## Create the local virtualenv and configure the repo's git config + hooks
+setup: reconcile-branches ## Reconcile template branches, install tooling, and configure Git hooks
+	@$(MAKE) --no-print-directory venv
 	git config --local include.path ../.gitconfig
 	$(PRE_COMMIT) install-hooks
+
+reconcile-branches: check-python ## Reconcile main and develop on origin in a fresh template clone
+	@$(PYTHON) eng/scripts/reconcile_branches.py
+
+branch-reconciliation-test: check-python ## Test branch reconciliation with local Git repositories
+	@$(PYTHON) -m unittest discover -s tests -p test_reconcile_branches.py
 
 venv: $(VENV_STAMP) ## Create/update the repo-local virtualenv (.venv) with the pinned tooling
 
@@ -121,8 +131,8 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 # ---------------------------------------------------------------------------
 # PRs run `make ci`. Each push to develop runs `make acceptance` on that
 # commit. Acceptance starts with the same checks and can grow independently.
-# Candidate creation, release and publication require downstream implementations.
-ci: security-exceptions-check lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
+# The foundation exercises candidate creation with its example package.
+ci: security-exceptions-check branch-reconciliation-test lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
 
 # Validate exception metadata even when dependency review is unavailable.
 .PHONY: security-exceptions-check
@@ -135,16 +145,20 @@ security-exceptions-check: check-python ## Reject invalid or expired dependency 
 
 acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
 
-# Reserved release phases are deliberately not successful no-ops. A downstream
-# project replaces each recipe and connects the gates for its own artifact.
-# None depends on another by default: invoking one must not accidentally run
-# a partial release or publish. See docs/integration-release.md.
-candidate: ## Reserved: build a versioned immutable candidate
-	@echo 'candidate: not implemented for this repository' >&2; exit 2
+# The example package reuses the build exercised by acceptance. Derived projects
+# replace the package build and smoke check with their own artifact-specific steps.
+candidate: pack tools check-python ## Bundle the versioned example package
+	@version=$$(dotnet tool run nbgv get-version -v NuGetPackageVersion) && \
+		commit=$$(git rev-parse HEAD) && \
+		$(PYTHON) eng/scripts/release_bundle.py create --input "$(PACKAGE_DIR)" \
+		--output "$$RELEASE_OUTPUT" --version "$$version" --commit "$$commit"
 
-candidate-acceptance: ## Reserved: test and record the exact candidate
-	@echo 'candidate-acceptance: not implemented for this repository' >&2; exit 2
+candidate-acceptance: check-python ## Check the packaged assembly and record acceptance
+	$(PYTHON) eng/scripts/release_bundle.py accept "$$RELEASE_OUTPUT" "$$RELEASE_EVIDENCE" \
+		$(PYTHON) eng/scripts/check_example_package.py "$$RELEASE_OUTPUT" \
+		"$(ARTIFACTS_DIR)/bin/library.example/$(TEST_CONFIG_DIR)"
 
+# Publication phases require a downstream implementation.
 release: ## Reserved: create a release from an accepted candidate
 	@echo 'release: not implemented for this repository' >&2; exit 2
 
@@ -161,14 +175,19 @@ RELEASE_INPUT ?=
 RELEASE_OUTPUT ?= $(ARTIFACTS_DIR)/release-bundle
 RELEASE_VERSION ?=
 RELEASE_COMMIT ?=
-export RELEASE_INPUT RELEASE_OUTPUT RELEASE_VERSION RELEASE_COMMIT
+RELEASE_EVIDENCE ?= $(ARTIFACTS_DIR)/candidate-acceptance.json
+export RELEASE_INPUT RELEASE_OUTPUT RELEASE_VERSION RELEASE_COMMIT RELEASE_EVIDENCE
 
-.PHONY: release-bundle release-bundle-verify release-bundle-test
+.PHONY: release-bundle release-bundle-verify release-bundle-test verify-accepted-candidate
 release-bundle: check-python ## Bundle an existing release directory and write a manifest
 	$(PYTHON) eng/scripts/release_bundle.py create --input "$$RELEASE_INPUT" --output "$$RELEASE_OUTPUT" --version "$$RELEASE_VERSION" --commit "$$RELEASE_COMMIT"
 
 release-bundle-verify: check-python ## Check the bundle payload against its manifest
 	$(PYTHON) eng/scripts/release_bundle.py verify "$$RELEASE_OUTPUT"
+
+verify-accepted-candidate: check-python ## Match a bundle to trusted evidence and expected metadata
+	$(PYTHON) eng/scripts/release_bundle.py verify-accepted "$$RELEASE_OUTPUT" "$$RELEASE_EVIDENCE" \
+		--version "$$RELEASE_VERSION" --commit "$$RELEASE_COMMIT"
 
 release-bundle-test: check-python ## Test the release bundle contract
 	$(PYTHON) -m unittest discover -s tests -p 'test_release_bundle.py'
@@ -198,15 +217,13 @@ analyzers-sync: check-dotnet ## Regenerate eng/analyzers/all-rules.globalconfig 
 analyzers-verify: check-dotnet ## Fail if eng/analyzers/all-rules.globalconfig is stale
 	dotnet run eng/analyzers/sync-rules.cs --check
 
-# The dotnet-build-test hook builds and tests the staged tree on `git commit`. `ci` reaches the same
-# code through its own `build` and `test` targets, so the hook is skipped here: leaving it in would
-# compile and run the whole suite twice per pipeline run. It is only skipped for `--all-files` runs
-# driven by make; `git commit` still runs it.
-LINT_SKIP_HOOKS := dotnet-build-test
+# CI runs build, test and analyzer verification directly after lint. Keep the
+# corresponding pre-commit hooks enabled for local commits and skip them here.
+LINT_SKIP_HOOKS := dotnet-build-test,dotnet-analyzers-verify
 
-lint: pre-commit ## Run the pre-commit hooks against all files (the build/test hook is left to `build` and `test`)
+lint: pre-commit ## Run the repository lint checks
 
-pre-commit: venv ## Run the pre-commit hooks against all files (the build/test hook is left to `build` and `test`)
+pre-commit: venv ## Run hooks other than the .NET checks invoked directly by CI
 	SKIP=$(LINT_SKIP_HOOKS) $(PRE_COMMIT) run --all-files --show-diff-on-failure
 
 clean: ## Remove the local virtualenv (rebuild it with `make setup`)
@@ -285,7 +302,7 @@ rulesets-diff: ## Report drift between .github/rulesets/ and the live rulesets
 rulesets-export: ## Overwrite .github/rulesets/ with the live rulesets
 	$(RULESETS) export
 
-check-python: ## Verify the interpreter used to build .venv is new enough
+check-python: ## Verify the setup interpreter is new enough
 	@command -v $(PYTHON) > /dev/null 2>&1 || { \
 		echo 'Error: `$(PYTHON)` was not found on your PATH.' 1>&2; \
 		echo '       Install any Python >= $(MIN_PYTHON), or point make at one you have:' 1>&2; \
@@ -299,30 +316,9 @@ check-python: ## Verify the interpreter used to build .venv is new enough
 		exit 1; \
 	}
 
-# Output directories outlive the project that produced them. `dotnet build` only ever writes; it
-# never notices that a project was deleted or renamed, so $(ARTIFACTS_DIR)/bin keeps the old
-# directory indefinitely. That is not cosmetic, because what reads that tree is a glob: `test`
-# discovers executables with $(ARTIFACTS_DIR)/bin/*.tests.*, so a deleted test project goes on being
-# run forever — passing, reporting coverage, and quietly propping up the totals. Measured on a
-# repository built from this template, right after deleting a project: 85.5% line / 81.8% branch
-# with the orphaned assembly still executing, 84.4% / 78.7% once it was pruned.
-#
-# $(TEST_RESULTS_DIR) AND $(TEST_HISTORY_DIR) HAVE THE SAME PROBLEM, THROUGH A SECOND GLOB.
-# `test` writes one `<project>.trx`, one `<project>.cobertura.xml` and one `<project>.json` per test
-# project, and `coverage` then merges "$(TEST_RESULTS_DIR)/*.cobertura.xml" — so a renamed or
-# deleted project leaves a report behind that every later run keeps merging. Renaming every test
-# project at once is what made this visible in a repository built from this template:
-# reportgenerator read 10 Cobertura files for 5 assemblies, counted every class twice under two
-# names, and printed a "does not exist (any more)" line for each source file in the stale half,
-# because those paths had moved.
-#
-# That is worse than noise. The merged total is computed over the union, and $(COVERAGE_THRESHOLDS)
-# is enforced against it, so the floor is being checked against partly fictional data — and the
-# duplicate assemblies are checked as if they were real ones.
-#
-# Pruning rather than wiping the tree, so incremental builds keep working: only directories with no
-# matching .csproj are removed. The worst case for a mistake here is a slower rebuild, never lost
-# work, because everything under $(ARTIFACTS_DIR) is generated.
+# Remove build outputs for deleted or renamed projects while keeping incremental
+# state for current projects. The test runner prunes reports using the solution's
+# actual test modules and their report names.
 prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longer exist
 	@case '$(ARTIFACTS_DIR)' in \
 		''|/*) echo 'make: refusing to prune ARTIFACTS_DIR=$(ARTIFACTS_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
@@ -338,22 +334,10 @@ prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longe
 			printf '%s\n' "$$current" | grep -qxF "$$name" \
 				|| { echo "make: pruning stale output $$dir"; rm -rf "$$dir"; }; \
 		done; \
-	done; \
-	for tree in '$(TEST_RESULTS_DIR)' '$(TEST_HISTORY_DIR)'; do \
-		case "$$tree" in \
-			''|/*) echo "make: refusing to prune '$$tree' — must be a non-empty relative path." 1>&2; exit 1 ;; \
-		esac; \
-		[ -d "$$tree" ] || continue; \
-		for file in "$$tree"/*; do \
-			[ -f "$$file" ] || continue; \
-			name=$$(basename "$$file" | sed -e 's/\.cobertura\.xml$$//' -e 's/\.trx$$//' -e 's/\.json$$//'); \
-			printf '%s\n' "$$current" | grep -qxF "$$name" \
-				|| { echo "make: pruning stale output $$file"; rm -f "$$file"; }; \
-		done; \
 	done
 
 build: check-dotnet prune-stale-output ## Build every project with analyzers enforced
-	dotnet build --configuration $(CONFIGURATION)
+	dotnet build "$(SOLUTION)" --configuration $(CONFIGURATION)
 
 # Tests run on Microsoft.Testing.Platform (opted into by the "test" section of global.json), which
 # makes every test project a self-contained executable that hosts its own test framework.
@@ -406,44 +390,12 @@ TEST_HISTORY_DIR ?= $(ARTIFACTS_DIR)/test-history
 # that go 7 days without a read, so a repo that sits idle for a week starts its history over.
 TEST_HISTORY_WINDOW_DAYS ?= 30
 
-# Test modules live at $(ARTIFACTS_DIR)/bin/<project>/<configuration>/<project>. The artifacts output
-# layout lowercases <configuration> and appends the build pivots to it, so a multi-targeted project
-# produces release_net10.0 rather than plain release — hence the trailing wildcard when globbing for
-# it. The apphost itself has no extension on Unix and .exe on Windows.
+# Packaging also uses the lowercased artifacts output configuration.
 TEST_CONFIG_DIR := $(shell printf '%s' '$(CONFIGURATION)' | tr '[:upper:]' '[:lower:]')
-TEST_EXE_EXT := $(if $(filter Windows_NT,$(OS)),.exe,)
 
-# The modules run one at a time on purpose: GitHub's ::group:: and ::endgroup:: commands are
-# sequential and anonymous, so modules running concurrently would interleave and file their output
-# under the wrong heading. Every module is run even after one fails, so a red build reports all of
-# its failures at once; the loop then exits non-zero. Finding no modules at all is itself a failure,
-# because a test target that silently runs nothing is indistinguishable from a passing one.
-test: build ## Run every test project, writing results and coverage into $(TEST_RESULTS_DIR)
-	@mkdir -p $(TEST_HISTORY_DIR); \
-	status=0; found=0; \
-	for dir in $(ARTIFACTS_DIR)/bin/*.tests.*; do \
-		name=$$(basename "$$dir"); \
-		for cfg in "$$dir"/$(TEST_CONFIG_DIR)*; do \
-			exe="$$cfg/$$name$(TEST_EXE_EXT)"; \
-			[ -x "$$exe" ] || continue; \
-			found=$$((found + 1)); \
-			echo "==> $$exe"; \
-			"$$exe" \
-				--results-directory $(TEST_RESULTS_DIR) \
-				--report-xunit-trx --report-xunit-trx-filename "$$name.trx" \
-				--report-gh \
-				--report-gh-history $(TEST_HISTORY_DIR)/$$name.json \
-				--report-gh-history-window $(TEST_HISTORY_WINDOW_DAYS) \
-				--coverage --coverage-output-format cobertura \
-				--coverage-output "$$name.cobertura.xml" || status=1; \
-		done; \
-	done; \
-	if [ "$$found" -eq 0 ]; then \
-		echo 'make: found no test executables under $(ARTIFACTS_DIR)/bin/*.tests.*/$(TEST_CONFIG_DIR)*/.' 1>&2; \
-		echo '      Check that `make build` succeeded and that CONFIGURATION=$(CONFIGURATION) is the one that was built.' 1>&2; \
-		exit 1; \
-	fi; \
-	exit $$status
+test: build check-python ## Run solution test projects, writing reports and coverage
+	$(PYTHON) eng/scripts/run_solution_tests.py "$(SOLUTION)" "$(CONFIGURATION)" \
+		"$(TEST_RESULTS_DIR)" "$(TEST_HISTORY_DIR)" "$(TEST_HISTORY_WINDOW_DAYS)"
 
 # ---------------------------------------------------------------------------
 # COVERAGE
@@ -555,72 +507,48 @@ pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 # ---------------------------------------------------------------------------
 # SBOM
 # ---------------------------------------------------------------------------
-# Generates an SPDX 2.2 SBOM with Microsoft's sbom-tool, pinned in
-# .config/dotnet-tools.json like every other local tool.
-#
-# WHY THIS TARGET IS .NET-SPECIFIC WHILE ITS CONTRACT IS NOT: an SBOM's substance
-# is the resolved dependency graph, and that graph only exists inside an
-# ecosystem's resolver — here NuGet's, via the packages.lock.json files that
-# RestorePackagesWithLockFile (Directory.Build.props) keeps committed. What IS
-# portable part is the contract: an `sbom` target writing into
-# $(ARTIFACTS_DIR). A specialized template decides when to run it and how
-# to keep the inventory with its release artifact.
-#
-# Both paths below are variables because they are the project-specific part. A
-# project that publishes a real drop should point SBOM_BUILD_DROP at its
-# `dotnet publish` output rather than the whole bin tree.
+# Inventory an already-built deliverable and its resolved build dependencies.
 SBOM_DIR ?= $(ARTIFACTS_DIR)/sbom
+SBOM_BUILD_DROP ?=
+SBOM_PROJECT ?=
+SBOM_COMPONENT_PATH ?= $(if $(SBOM_PROJECT),$(ARTIFACTS_DIR)/obj/$(SBOM_PROJECT))
+SBOM_PACKAGE_NAME ?=
+SBOM_PACKAGE_VERSION ?=
+SBOM_PACKAGE_SUPPLIER ?=
+SBOM_NAMESPACE_BASE ?=
+export SBOM_DIR SBOM_BUILD_DROP SBOM_COMPONENT_PATH SBOM_PACKAGE_NAME
+export SBOM_PACKAGE_VERSION SBOM_PACKAGE_SUPPLIER SBOM_NAMESPACE_BASE
 
-# The files the SBOM inventories: the packages that actually ship. Before `pack` existed this
-# pointed at $(ARTIFACTS_DIR)/bin, where 328 of 336 files belonged to the test project's output —
-# an inventory overwhelmingly describing test infrastructure rather than the artifact.
-SBOM_BUILD_DROP ?= $(PACKAGE_DIR)
-
-# Where sbom-tool looks for dependencies. This must point at project.assets.json,
-# NOT at the source tree: assets.json is the file NuGet writes the *resolved*
-# graph into, and it is what component detection reads. Pointing this at `src`
-# finds nothing at all — it silently produces an SBOM with zero packages, because
-# UseArtifactsOutput (Directory.Build.props) relocates obj/ out of the project
-# directories and into $(ARTIFACTS_DIR)/obj.
-#
-# Two things about the default scope are worth knowing, because both are
-# properties of assets-based detection rather than mistakes to fix:
-#
-#   * It is scoped to $(SBOM_PROJECT), the project that ships. Pointing it at
-#     $(ARTIFACTS_DIR)/obj instead would cover every project built and pull in
-#     test-only packages — 46 rather than the 12 the library resolves. A solution
-#     with several packable projects wants one SBOM per package, so override both
-#     $(SBOM_PROJECT) and $(SBOM_BUILD_DROP) per invocation.
-#   * Analyzers and build-time-only packages (SonarAnalyzer, Roslynator,
-#     SourceLink, Nerdbank.GitVersioning ...) are included even though they are
-#     `PrivateAssets` and ship nothing. They are genuine PackageReferences in
-#     assets.json, and detection cannot tell a compile-time dependency from a
-#     runtime one. Treat the result as "what this build consumed", which is the
-#     honest reading, rather than "what the artifact contains".
-SBOM_PROJECT ?= library.example
-SBOM_COMPONENT_PATH ?= $(ARTIFACTS_DIR)/obj/$(SBOM_PROJECT)
-
-SBOM_PACKAGE_NAME ?= $(basename $(SOLUTION))
-SBOM_PACKAGE_SUPPLIER ?= mxwlf
-SBOM_NAMESPACE_BASE ?= https://github.com/mxwlf/dotnet-template
-
-sbom: tools pack ## Generate an SPDX 2.2 SBOM for the packages in $(PACKAGE_DIR) into $(SBOM_DIR)
+sbom: tools ## Generate an SPDX 2.2 SBOM for an existing, explicitly scoped deliverable
 	@set -e; \
-	version="$$(dotnet nbgv get-version --variable SemVer2)"; \
-	echo "make: SBOM for $(SBOM_PACKAGE_NAME) $$version"; \
-	mkdir -p "$(SBOM_DIR)"; \
+	test -n "$$SBOM_BUILD_DROP" && test -d "$$SBOM_BUILD_DROP" && \
+		test -n "$$(find "$$SBOM_BUILD_DROP" -type f -print -quit)" || \
+		{ echo 'make: set SBOM_BUILD_DROP to a non-empty deliverable directory.' >&2; exit 1; }; \
+	test -n "$$SBOM_COMPONENT_PATH" && test -f "$$SBOM_COMPONENT_PATH/project.assets.json" || \
+		{ echo 'make: set SBOM_PROJECT or SBOM_COMPONENT_PATH to select a restored project.' >&2; exit 1; }; \
+	test -n "$$SBOM_PACKAGE_NAME" && test -n "$$SBOM_PACKAGE_VERSION" && \
+		test -n "$$SBOM_PACKAGE_SUPPLIER" && test -n "$$SBOM_NAMESPACE_BASE" || \
+		{ echo 'make: set the SBOM package name, version, supplier, and namespace base.' >&2; exit 1; }
+	mkdir -p "$$SBOM_DIR"
 	dotnet sbom-tool generate \
-		-b "$(SBOM_BUILD_DROP)" \
-		-bc "$(SBOM_COMPONENT_PATH)" \
-		-m "$(SBOM_DIR)" \
-		-pn "$(SBOM_PACKAGE_NAME)" \
-		-pv "$$version" \
-		-ps "$(SBOM_PACKAGE_SUPPLIER)" \
-		-nsb "$(SBOM_NAMESPACE_BASE)" \
+		-b "$$SBOM_BUILD_DROP" \
+		-bc "$$SBOM_COMPONENT_PATH" \
+		-m "$$SBOM_DIR" \
+		-pn "$$SBOM_PACKAGE_NAME" \
+		-pv "$$SBOM_PACKAGE_VERSION" \
+		-ps "$$SBOM_PACKAGE_SUPPLIER" \
+		-nsb "$$SBOM_NAMESPACE_BASE" \
 		-mi SPDX:2.2 \
 		-D true \
 		-pm true
-	@echo "make: wrote $(SBOM_DIR)/_manifest/spdx_2.2/manifest.spdx.json"
+	@echo "make: wrote $$SBOM_DIR/_manifest/spdx_2.2/manifest.spdx.json"
+
+example-sbom: pack tools ## Build and inventory the example NuGet packages
+	@version=$$(dotnet tool run nbgv get-version -v NuGetPackageVersion) && \
+		$(MAKE) sbom SBOM_BUILD_DROP="$(PACKAGE_DIR)" \
+		SBOM_COMPONENT_PATH="$(ARTIFACTS_DIR)/obj/library.example" \
+		SBOM_PACKAGE_NAME=mxwlf.net.library.example SBOM_PACKAGE_VERSION="$$version" \
+		SBOM_PACKAGE_SUPPLIER=mxwlf SBOM_NAMESPACE_BASE=https://github.com/mxwlf/dotnet-template
 
 # Notes on the flags above, since several are deliberate omissions:
 #   -D true   deletes any previous _manifest directory, so `make sbom` is

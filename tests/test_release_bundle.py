@@ -49,6 +49,31 @@ class ReleaseBundleTests(unittest.TestCase):
                     (bundle / 'files/extra').write_text('extra')
                 self.assertNotEqual(self.run_bundle('verify', bundle).returncode, 0)
 
+    def test_acceptance_requires_success_and_binds_the_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / 'input'
+            source.mkdir()
+            (source / 'file').write_text('original')
+            bundle = root / 'bundle'
+            evidence = root / 'acceptance.json'
+            self.assertEqual(self.run_bundle('create', '--input', source, '--output', bundle,
+                                             '--version', '1', '--commit', 'abc').returncode, 0)
+            self.assertNotEqual(self.run_bundle('accept', bundle, evidence, sys.executable,
+                                                '-c', 'raise SystemExit(1)').returncode, 0)
+            self.assertFalse(evidence.exists())
+            self.assertEqual(self.run_bundle('accept', bundle, evidence, sys.executable,
+                                             '-c', 'pass').returncode, 0)
+            gate = ('verify-accepted', bundle, evidence, '--version', '1', '--commit')
+            self.assertEqual(self.run_bundle(*gate, 'abc').returncode, 0)
+            self.assertNotEqual(self.run_bundle(*gate, 'def').returncode, 0)
+
+            # A replaced manifest can still pass ordinary integrity verification.
+            manifest = bundle / 'manifest.json'
+            manifest.write_text(json.dumps(json.loads(manifest.read_text())))
+            self.assertEqual(self.run_bundle('verify', bundle).returncode, 0)
+            self.assertNotEqual(self.run_bundle(*gate, 'abc').returncode, 0)
+
     def test_create_refuses_existing_destination_and_symlinks(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Library.Example.Tests.Integration;
 
-// Remove alongside the explicit skips after the fixtures are available on public main.
+// Remove alongside the explicit skips after the fixtures are available on public develop.
 #pragma warning disable xUnit1004
 
 /// <summary>
@@ -14,8 +14,8 @@ namespace Library.Example.Tests.Integration;
 /// </summary>
 public sealed class GitHubCatalogTests
 {
-    private const string AwaitingPublication = "Enable after verifying the fixture JSON on mxwlf/dotnet-template main.";
-    private const string FixtureRoot = "https://raw.githubusercontent.com/mxwlf/dotnet-template/main/test/fixtures/document-catalog/";
+    private const string AwaitingPublication = "Enable after verifying the fixture JSON on mxwlf/dotnet-template develop.";
+    private const string FixtureRoot = "https://raw.githubusercontent.com/mxwlf/dotnet-template/develop/test/fixtures/document-catalog/";
 
     /// <summary>
     /// Overlapping ranges include the last page exactly once.

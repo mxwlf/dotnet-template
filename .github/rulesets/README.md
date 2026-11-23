@@ -20,8 +20,8 @@ workflow they impose — how a change reaches `develop` — see
 ## What the shipped rulesets enforce
 
 The integration branch is `develop`; `main` is intended to record the promoted
-source commit. Create `develop` before applying `develop-protection`. Both
-rulesets block deletion and force pushes, require a PR, one approval, resolved
+source commit. Run [`make setup`](../../docs/branch-reconciliation.md) before
+applying branch protection. Both rulesets block deletion and force pushes, require a PR, one approval, resolved
 review threads, an up-to-date branch and the `ci` check. They permit merge
 commits and allow a repository admin to bypass the rules within a PR. That
 bypass includes failing checks, so it is not a hard gate for a sole maintainer.
@@ -80,6 +80,24 @@ actually runs on a pull request.
 (The other direction behaves differently: when an entire *workflow* is skipped by
 a path or branch filter, its checks stay pending forever rather than passing.
 Either way, a required check is only worth anything if it genuinely runs.)
+
+## Roll out changes to `main`
+
+Preview the change before applying it. Check that the named required jobs
+report on a pull request targeting `main` before enforcing new requirements.
+
+```sh
+make rulesets-diff RULESET=protect-main
+make rulesets-apply RULESET=protect-main
+make rulesets-diff RULESET=protect-main
+```
+
+For `mxwlf/dotnet-template`, the [repository-specific definition](repositories/mxwlf/dotnet-template/protect-main.json)
+preserves the existing CodeQL and code-quality gates. Diff, apply, and export
+use that file for this repository. Other repositories use the portable rules
+unless they provide their own definition under `repositories/OWNER/REPO/`
+with the same filename and ruleset name. Add code-scanning requirements only
+after configuring the corresponding scans.
 
 ## What is portable between repositories
 

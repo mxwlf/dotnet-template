@@ -13,19 +13,28 @@ specialized template decides what to build and where to distribute it.
 ## Getting started
 
 Install Git, GNU make, Python 3.10 or later, and an SDK satisfying
-[`global.json`](global.json). Then run:
+[`global.json`](global.json). Clone the repository GitHub generated from the
+template. From the clone's root, run setup before making commits or applying
+branch protection.
 
 ```sh
 make setup
 make ci
 ```
 
-`make setup` installs the pinned pre-commit tool in a repository-local `.venv`
-and configures the Git hooks. `make ci` runs the common hooks, release-bundle
+`make setup` first runs `make reconcile-branches` to establish shared history
+for `main` and `develop` on `origin`. It then installs the pinned pre-commit
+tool in a repository-local `.venv` and configures the Git hooks. See
+[branch reconciliation](docs/branch-reconciliation.md) for both GitHub template
+options, the preflight checks, and what to do if setup stops.
+
+`make reconcile-branches` runs just the branch step. Use
+`make branch-reconciliation-test` to exercise the script with temporary local
+Git repositories. `make ci` runs those tests, the common hooks, release-bundle
 checks, a Release build with analyzers, analyzer configuration verification,
 tests, and the coverage gate. GitHub Actions and Azure DevOps call the same
-entry point for PRs. Pushes to `develop` run `make acceptance`, which initially
-executes the same checks and can be extended independently. A full Git history
+entry point for PRs. Pushes to `develop` run `make acceptance`, which starts
+with the same checks and can be extended independently. A full Git history
 is needed for versioning.
 
 `make help` lists the targets. `make deepclean` removes generated build and
@@ -42,8 +51,9 @@ tests staged .NET inputs at commit time; `make ci` runs those checks separately.
 - [`Directory.Packages.props`](Directory.Packages.props) and project lock files
   record package versions; [`.config/dotnet-tools.json`](.config/dotnet-tools.json)
   pins repository tools.
-- `make test` discovers test executables under `artifacts/bin/*.tests.*`.
-  Keep that naming convention when adding test projects. It writes TRX and
+- `make test` runs projects in the solution that declare `IsTestProject`.
+  Add each test project to the solution. The runner fails if an expected
+  test executable is missing. It writes TRX and
   coverage reports under `artifacts/test-results/`.
 - `make coverage` merges the reports and enforces an 80% line-coverage floor by
   default; `COVERAGE_MIN_LINE` can change it.
@@ -54,7 +64,7 @@ The unit suite covers range parsing, catalog substitution, and HTTP retries with
 scripted responses. The [integration suite](test/integration/library.example.tests.integration/GitHubCatalogTests.cs)
 uses the real HTTP client with a different GitHub raw directory for each
 [fixture scenario](test/fixtures/document-catalog). Its tests are skipped for the
-first pass. After the fixtures reach public `main`, verify the raw JSON URLs,
+first pass. After the fixtures reach public `develop`, verify the raw JSON URLs,
 remove the explicit skips, and run `make test`.
 
 Both CI providers publish test and coverage results. GitHub Actions also
@@ -62,14 +72,19 @@ uploads the raw reports; Azure DevOps displays them in its test and coverage
 views. Packaging and SBOM generation are optional targets, not foundation CI
 requirements.
 
+When a dependency or project change affects analyzer rules, run
+`make analyzers-sync` and commit the generated configuration with the change.
+The pre-commit hook verifies the staged configuration when analyzer inputs
+change. For Dependabot updates, regenerate after updating the PR from
+`develop` and rerun CI before merging.
+
 ## Integration and release phases
 
-PRs into `develop` run `make ci`. Each `develop` push runs `make acceptance` on
-the integrated commit. The [integration baseline](docs/integration-release.md)
-defines the shared phase names and the golden-release contract. `candidate`,
-`candidate-acceptance`, `release`, `publish`, and `record-release` are reserved
-targets that fail until a downstream project implements them. The bundle tool
-alone does not implement any of those phases or prove acceptance or provenance.
+PRs into `develop` run `make ci`. Each `develop` push runs `make acceptance`
+on the integrated commit, builds an example candidate, and records evidence
+after the package check passes. The [integration baseline](docs/integration-release.md)
+defines the shared phase names and the golden-release contract. The `release`,
+`publish`, and `record-release` targets are reserved for downstream projects.
 
 ## Release contract
 
@@ -79,19 +94,17 @@ foundation neither publishes packages nor deploys applications. The previous
 NuGet workflow is retained as [historical reference](examples/nuget-publish.yml.reference),
 not as an enabled or ready-to-use publishing workflow.
 
-The checked-in example is packable. `make pack` builds its NuGet packages and
-`make sbom` produces an example SPDX document; neither publishes anything.
-`make sbom` is scoped by default to `library.example` and its package output.
-An adopter must configure metadata, paths, and an inventory appropriate to each
-actual deliverable. In particular, one example SBOM does not establish the
-contents of multiple packages or an application deployment.
+Run `make pack` to build the example NuGet packages and `make example-sbom`
+to inventory the example. For a derived repository, use the
+[package metadata and SBOM checklist](docs/package-metadata-sbom.md) to
+configure the package identity and the scope of each deliverable.
 
 ## Branch protection
 
 The committed [`protect-main` ruleset](.github/rulesets/protect-main.json)
 and [`develop-protection` ruleset](.github/rulesets/develop-protection.json)
-require the `ci` job on their respective branches. Create `develop` and confirm
-PR checks report before applying either ruleset. They are not applied
+require the `ci` job on their respective branches. Confirm both branches exist
+and PR checks report before applying either ruleset. They are not applied
 automatically; a future promotion process needs explicitly configured authority
 to advance `main`. See the [ruleset guide](.github/rulesets/README.md) for
 setup, admin bypass, merge method, and portability details. A project adding
