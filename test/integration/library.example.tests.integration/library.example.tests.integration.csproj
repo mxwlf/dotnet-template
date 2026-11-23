@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Library.Example.Tests.Integration</RootNamespace>
+    <OutputType>Exe</OutputType>
+    <IsTestProject>true</IsTestProject>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Microsoft.Testing.Extensions.GitHubActionsReport" />
+    <PackageReference Include="xunit.v3.mtp-v2" />
+    <ProjectReference Include="../../../src/library.example/library.example.csproj" />
+  </ItemGroup>
+</Project>

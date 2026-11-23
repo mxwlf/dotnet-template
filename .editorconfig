@@ -177,9 +177,8 @@ csharp_using_directive_placement = outside_namespace
 dotnet_sort_system_directives_first = true
 dotnet_separate_import_directive_groups = true
 
-# Modern language features where they are unambiguous wins. These match the existing code — the
-# property pattern in the temperature check, `nameof` in the argument exceptions — and are listed so
-# the preference survives someone writing the older form.
+# Prefer modern language features where they make intent clear, including property patterns and
+# `nameof` in argument exceptions.
 # Expression bodies where the member fits on one line, which is what roslynator_body_style says
 # above. Accessors and lambdas included; constructors and operators are left to the block form,
 # where an expression body hides the fact that initialization is happening.

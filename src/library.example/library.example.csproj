@@ -28,7 +28,7 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/mxwlf/dotnet-template</RepositoryUrl>
     <PackageProjectUrl>https://github.com/mxwlf/dotnet-template</PackageProjectUrl>
-    <Description>Example library shipped by dotnet-template, a baseline .NET repository template.</Description>
+    <Description>Parse page ranges and select pages using a document catalog over HTTP.</Description>
     <PackageTags>dotnet;library;template</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -44,6 +44,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 </Project>

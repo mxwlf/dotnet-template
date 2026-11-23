@@ -15,7 +15,7 @@ dotnet_diagnostic.CA1707.severity = none
 dotnet_diagnostic.CA2007.severity = none
 dotnet_diagnostic.MA0004.severity = none
 
-# Assertions about a parameter name (`.WithParameterName("zipCode")`) intentionally spell the
+# Assertions about a parameter name (`.WithParameterName("pageCount")`) intentionally spell the
 # name out as a literal. Using `nameof` on an identically named local in the test would keep
 # compiling after the library renamed its parameter, silently weakening the assertion.
 dotnet_diagnostic.CA1507.severity = none
@@ -32,7 +32,7 @@ dotnet_diagnostic.RCS1090.severity = none
 dotnet_diagnostic.VSTHRD111.severity = none
 
 # Test names are `{method}_When{inputs}_Then{expectation}`. The method under test being async says
-# nothing about the test, and an `Async` suffix on `IsItGoodToWalkAsync_WhenTheZipCode..._Then...`
+# nothing about the test, and an `Async` suffix on `SelectAsync_WhenTheCatalog..._Then...`
 # would describe the subject rather than the test. Same reason CA1707 is off above.
 dotnet_diagnostic.RCS1046.severity = none
 
