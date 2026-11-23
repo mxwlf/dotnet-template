@@ -22,13 +22,16 @@
 # regeneration silently reverts it.
 
 is_global = true
-# 1065 rules from 22 analyzer assemblies across 2 projects.
+# 1065 rules from 25 analyzer assemblies across 3 projects.
 # Assemblies contributing no C# rules - source generators, and the code-fix halves of the
 # analyzers above, which carry the fixes rather than the diagnostics:
 #   Meziantou.Analyzer.CodeFixers.dll
 #   Microsoft.CodeAnalysis.BannedApiAnalyzers.dll
+#   Microsoft.Extensions.Configuration.Binder.SourceGeneration.dll
 #   Microsoft.Extensions.Logging.Generators.dll
 #   Microsoft.Extensions.Options.SourceGeneration.dll
+#   Microsoft.Gen.Logging.dll
+#   Microsoft.Gen.Metrics.dll
 #   Microsoft.VisualStudio.Threading.Analyzers.CodeFixes.dll
 #   NSubstitute.Analyzers.Shared.dll
 #   Roslynator.CSharp.Analyzers.CodeFixes.dll

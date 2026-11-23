@@ -5,7 +5,8 @@ Git hooks, a pinned SDK and tools, analyzers, build and test conventions, and a
 small release-bundle contract. It is a foundation for future NuGet library,
 command-line application, and Aspire service templates.
 
-The example library and its tests exercise the foundation. The example can be
+The [example library](src/library.example/README.md) parses page ranges and
+selects pages using a remote document catalog. The example can be
 packed locally, but this repository has no active publishing workflow. A
 specialized template decides what to build and where to distribute it.
 
@@ -48,6 +49,13 @@ tests staged .NET inputs at commit time; `make ci` runs those checks separately.
   default; `COVERAGE_MIN_LINE` can change it.
 - [`version.json`](version.json) and `Nerdbank.GitVersioning` derive versions from
   Git history. The CI checkouts fetch full history for this reason.
+
+The unit suite covers range parsing, catalog substitution, and HTTP retries with
+scripted responses. The [integration suite](test/integration/library.example.tests.integration/GitHubCatalogTests.cs)
+uses the real HTTP client with a different GitHub raw directory for each
+[fixture scenario](test/fixtures/document-catalog). Its tests are skipped for the
+first pass. After the fixtures reach public `main`, verify the raw JSON URLs,
+remove the explicit skips, and run `make test`.
 
 Both CI providers publish test and coverage results. GitHub Actions also
 uploads the raw reports; Azure DevOps displays them in its test and coverage

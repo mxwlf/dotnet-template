@@ -21,7 +21,7 @@
          before your first tag if you are building on this template; publish.yml refuses to publish
          while it still names this template's own id from a different repository. -->
     <PackageId>mxwlf.net.library.example</PackageId>
-    <Description>Example library shipped by dotnet-template, a baseline .NET repository template.</Description>
+    <Description>Parse page ranges and select pages using a document catalog over HTTP.</Description>
     <PackageTags>dotnet;library;template</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
@@ -37,6 +37,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
   </ItemGroup>
 </Project>

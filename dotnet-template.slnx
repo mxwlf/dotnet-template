@@ -8,6 +8,9 @@
     <Project Path="src/library.example/library.example.csproj" />
   </Folder>
   <Folder Name="/test/" />
+  <Folder Name="/test/integration/">
+    <Project Path="test/integration/library.example.tests.integration/library.example.tests.integration.csproj" />
+  </Folder>
   <Folder Name="/test/unit/">
     <Project Path="test/unit/library.example.tests.unit/library.example.tests.unit.csproj" />
   </Folder>
