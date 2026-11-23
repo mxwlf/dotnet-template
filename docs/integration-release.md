@@ -104,7 +104,8 @@ follow-up alignment items, not guarantees supplied by this foundation.
 
 ## Adoption and branch protection
 
-Create `develop` and ensure the CI workflow runs for a PR to it before applying
+Run [`make setup`](branch-reconciliation.md) to reconcile `main` and `develop`.
+Confirm the CI workflow runs for a PR to `develop` before applying
 `develop-protection`. The shipped rulesets require one review and `ci` on both
 protected branches. An admin can bypass them during a pull request, including a
 red check; this is not a hard approval boundary for a sole maintainer.
