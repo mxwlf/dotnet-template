@@ -20,9 +20,11 @@ def project_properties(project, configuration, framework=None):
     return json.loads(output)['Properties']
 
 
-def test_modules(solution, configuration):
+def test_modules(solution, configuration, suite=None):
     for node in ElementTree.parse(solution).iter('Project'):
         project = solution.parent / node.attrib['Path'].replace('\\', '/')
+        if suite and not project.is_relative_to(solution.parent / "test" / suite):
+            continue
         properties = project_properties(project, configuration)
         frameworks = [value.strip() for value in properties['TargetFrameworks'].split(';') if value.strip()]
         for framework in frameworks or [None]:
@@ -55,9 +57,10 @@ def main():
     parser.add_argument('results', type=Path)
     parser.add_argument('history', type=Path)
     parser.add_argument('history_days')
+    parser.add_argument('--suite', choices=('unit', 'integration'))
     args = parser.parse_args()
     try:
-        modules = list(test_modules(args.solution, args.configuration))
+        modules = list(test_modules(args.solution, args.configuration, args.suite))
         if not modules:
             raise ValueError(f'{args.solution}: no test projects found')
         names = {name for name, _ in modules}

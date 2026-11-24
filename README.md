@@ -14,19 +14,19 @@ specialized template decides what to build and where to distribute it.
 
 Install Git, GNU make, Python 3.10 or later, and an SDK satisfying
 [`global.json`](global.json). Clone the repository GitHub generated from the
-template. From the clone's root, run setup before making commits or applying
+template. From the clone's root, run initialization before making commits or applying
 branch protection.
 
 ```sh
-make setup
+make init
 make ci
 ```
 
-`make setup` first runs `make reconcile-branches` to establish shared history
-for `main` and `develop` on `origin`. It then installs the pinned pre-commit
+`make init` first runs `make reconcile-branches` to establish shared history
+for `main` and `develop` on `origin`. It then runs `make setup`, which installs the pinned pre-commit
 tool in a repository-local `.venv` and configures the Git hooks. See
 [branch reconciliation](docs/branch-reconciliation.md) for both GitHub template
-options, the preflight checks, and what to do if setup stops.
+options, the preflight checks, and what to do if initialization stops. Run `make setup` by itself to configure a subsequent worktree locally.
 
 `make reconcile-branches` runs just the branch step. Use
 `make branch-reconciliation-test` to exercise the script with temporary local
@@ -37,8 +37,12 @@ entry point for PRs. Pushes to `develop` run `make acceptance`, which starts
 with the same checks and can be extended independently. A full Git history
 is needed for versioning.
 
-`make help` lists the targets. `make deepclean` removes generated build and
-test output as well as the local virtual environment. The common hooks include secret detection,
+`make help` lists the targets. Bare `make`, `make all`, and `make build` build the solution. Use `make restore` for
+solution dependencies and `make tools` for pinned tools. `make clean` removes compilation
+output for the selected configuration and preserves test history and the virtual environment.
+`make rebuild` cleans and then builds. `make clean-venv` removes just the environment.
+`make distclean` (also `make deepclean`) removes all generated build and test output,
+history, and the virtual environment. The common hooks include secret detection,
 commit-message validation, and Markdown spelling. The .NET hook also builds and
 tests staged .NET inputs at commit time; `make ci` runs those checks separately.
 
@@ -55,6 +59,11 @@ tests staged .NET inputs at commit time; `make ci` runs those checks separately.
   Add each test project to the solution. The runner fails if an expected
   test executable is missing. It writes TRX and
   coverage reports under `artifacts/test-results/`.
+- `make test-unit` and `make test-integration` select solution projects under
+  `test/unit/` and `test/integration/`. Each writes to its own subdirectory of the
+  results and history directories, preserving full-suite reports and history.
+- `make lint` runs read-only hooks. `make check` adds the template tests, analyzer
+  verification, solution tests and coverage. `make ci` also runs hooks that can fix files.
 - `make coverage` merges the reports and enforces an 80% line-coverage floor by
   default; `COVERAGE_MIN_LINE` can change it.
 - [`version.json`](version.json) and `Nerdbank.GitVersioning` derive versions from
@@ -94,7 +103,7 @@ foundation neither publishes packages nor deploys applications. The previous
 NuGet workflow is retained as [historical reference](examples/nuget-publish.yml.reference),
 not as an enabled or ready-to-use publishing workflow.
 
-Run `make pack` to build the example NuGet packages and `make example-sbom`
+Run `make package` (also `make pack`) to build the example NuGet packages and `make example-sbom`
 to inventory the example. For a derived repository, use the
 [package metadata and SBOM checklist](docs/package-metadata-sbom.md) to
 configure the package identity and the scope of each deliverable.

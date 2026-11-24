@@ -88,7 +88,7 @@ steps:
   # succeededOrFailed(), because the run worth reading the results of is the one that failed; make has
   # already decided the build's outcome by then, so neither task is allowed to influence it —
   # failTaskOnFailedTests stays off and an empty coverage file is not an error. Both are legitimately
-  # absent when `make ci` stopped in `lint`, which each task reports as a warning.
+  # absent when `make ci` stopped in `pre-commit`, which each task reports as a warning.
   - task: PublishTestResults@2
     condition: succeededOrFailed()
     displayName: Publish test results

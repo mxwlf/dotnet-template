@@ -92,7 +92,8 @@ jobs:
           fi
 
       # The same entrypoint CI uses, so a package is never published without passing the checks
-      # that gate a merge. This produces artifacts/package/<config>/ and the SBOM.
+      # that gate a merge. Historical assumption: CI used to package and generate an SBOM.
+      # A downstream publisher must explicitly run make package and generate its scoped SBOM.
       - run: make ci
 
       # Packaging is opt-in per project, so a repository can legitimately have nothing packable —
