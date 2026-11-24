@@ -4,13 +4,14 @@
 # and pre-commit hooks.
 #
 # Usage:
-#   make            # same as `make help`
+#   make            # same as `make build`
 #   make help       # list available targets
-#   make setup      # reconcile branches, create .venv, and configure Git hooks
+#   make init       # reconcile branches, then run local setup
+#   make setup      # install tooling and configure local Git hooks
 #   make reconcile-branches  # reconcile main and develop on origin
 #   make ci         # run the full CI check suite (the command pipelines invoke)
-#   make lint       # run all pre-commit hooks against all files
-#   make clean      # remove the local virtualenv
+#   make lint       # run read-only repository hooks
+#   make clean      # clean compilation output
 #
 # Requirements:
 #   - GNU make, git, and a POSIX shell (on Windows: Git Bash or WSL).
@@ -24,7 +25,7 @@
 #   installs the pinned `pre-commit` from requirements-dev.txt into it.
 #
 # How it works:
-#   `make setup` runs these steps:
+#   `make init` runs these steps:
 #     1. Reconciles origin/main and origin/develop in fresh template clones.
 #     2. Builds .venv/ and installs the pinned tooling into it.
 #     3. Runs `git config --local include.path ../.gitconfig`, which makes this
@@ -33,7 +34,9 @@
 #        scripts (pre-commit and commit-msg) without needing `pre-commit
 #        install`. Those scripts run .venv's `pre-commit`, never PATH's.
 
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := all
+
+all: build ## Build the solution (default)
 
 SOLUTION := dotnet-template.slnx
 CONFIGURATION ?= Release
@@ -68,15 +71,18 @@ VENV_STAMP := $(VENV)/.requirements-installed
 
 RULESETS := ./eng/scripts/github-rulesets.sh
 
-.PHONY: setup reconcile-branches branch-reconciliation-test \
+.PHONY: all restore rebuild package distclean test-unit test-integration make-contract-test acceptance candidate candidate-acceptance release publish record-release analyzers-sync analyzers-verify
+.PHONY: init setup check clean-venv reconcile-branches branch-reconciliation-test \
         venv ci lint pre-commit clean deepclean check-python check-dotnet help tools build test coverage pack sbom example-sbom prune-stale-output \
         rulesets-apply rulesets-diff rulesets-export
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-setup: reconcile-branches ## Reconcile template branches, install tooling, and configure Git hooks
-	@$(MAKE) --no-print-directory venv
+init: reconcile-branches ## Initialize template branches, then configure local development tools
+	@$(MAKE) --no-print-directory setup
+
+setup: venv ## Install development tooling and configure local Git hooks
 	git config --local include.path ../.gitconfig
 	$(PRE_COMMIT) install-hooks
 
@@ -132,7 +138,10 @@ check-dotnet: ## Verify an installed .NET SDK satisfies the version pinned in gl
 # PRs run `make ci`. Each push to develop runs `make acceptance` on that
 # commit. Acceptance starts with the same checks and can grow independently.
 # The foundation exercises candidate creation with its example package.
-ci: security-exceptions-check branch-reconciliation-test lint release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
+check: export RestoreLockedMode := true
+check: lint make-contract-test security-exceptions-check branch-reconciliation-test release-bundle-test analyzers-verify coverage ## Run read-only checks, tests, and coverage
+
+ci: make-contract-test security-exceptions-check branch-reconciliation-test pre-commit release-bundle-test build analyzers-verify test coverage ## Run the foundation CI checks (what pipelines invoke)
 
 # Validate exception metadata even when dependency review is unavailable.
 .PHONY: security-exceptions-check
@@ -147,7 +156,7 @@ acceptance: ci ## Run post-integration acceptance checks (extends ci by default)
 
 # The example package reuses the build exercised by acceptance. Derived projects
 # replace the package build and smoke check with their own artifact-specific steps.
-candidate: pack tools check-python ## Bundle the versioned example package
+candidate: package tools check-python ## Bundle the versioned example package
 	@version=$$(dotnet tool run nbgv get-version -v NuGetPackageVersion) && \
 		commit=$$(git rev-parse HEAD) && \
 		$(PYTHON) eng/scripts/release_bundle.py create --input "$(PACKAGE_DIR)" \
@@ -221,62 +230,33 @@ analyzers-verify: check-dotnet ## Fail if eng/analyzers/all-rules.globalconfig i
 # corresponding pre-commit hooks enabled for local commits and skip them here.
 LINT_SKIP_HOOKS := dotnet-build-test,dotnet-analyzers-verify
 
-lint: pre-commit ## Run the repository lint checks
+lint: venv ## Run read-only repository hooks
+	SKIP=$(LINT_SKIP_HOOKS),sync-pre-commit-deps,trailing-whitespace,end-of-file-fixer,fix-byte-order-marker,mixed-line-ending $(PRE_COMMIT) run --all-files --show-diff-on-failure
 
 pre-commit: venv ## Run hooks other than the .NET checks invoked directly by CI
 	SKIP=$(LINT_SKIP_HOOKS) $(PRE_COMMIT) run --all-files --show-diff-on-failure
 
-clean: ## Remove the local virtualenv (rebuild it with `make setup`)
-	rm -rf $(VENV)
+clean: check-dotnet ## Remove compilation output for the selected configuration
+	dotnet clean "$(SOLUTION)" --configuration "$(CONFIGURATION)"
 
-# EVERY GENERATED TREE, NOT JUST THE ONES A BUILD WOULD OVERWRITE.
-# `prune-stale-output` is the surgical tool — it removes output whose project is gone and leaves
-# incremental state intact, so it can run before every build. This is the opposite: it takes the
-# tree back to what a fresh clone has, for when the question is "is this real, or is my tree
-# stale?" and the cheapest answer is to have no stale tree. Nothing it deletes is recoverable from
-# here, and nothing it deletes needs to be: every path below is generated and gitignored.
-#
-# $(VENV) comes along, because a deep clean that left the toolchain behind would be answering a
-# different question than the one asked.
-#
-# bin/ AND obj/ ARE SWEPT EVEN THOUGH THIS LAYOUT DOES NOT PRODUCE THEM. UseArtifactsOutput in
-# Directory.Build.props redirects all of it under $(ARTIFACTS_DIR), so a per-project bin/ or obj/
-# means something built outside that layout — a project that set its own output path, an older
-# checkout, or a tool that ignored the property. Those are exactly the directories that then go
-# stale invisibly, because no `dotnet build` here will ever overwrite them. Both are gitignored, so
-# anything the sweep finds is generated by definition; the find prunes node_modules, $(VENV), .git
-# and .idea first, because package trees are full of directories called bin.
-#
-# `dotnet clean` runs for completeness, giving the SDK's own notion of clean its say, but
-# $(ARTIFACTS_DIR) is removed wholesale straight after, which supersedes it. It is prefixed with `-`
-# so a failure cannot stop the deletions: a clean has to work when the tree is too broken to build,
-# which is most of why anyone reaches for this. Verified to exit 0 with no assets file, so
-# re-running this target is not an error.
-#
-# A REPOSITORY BUILT FROM THIS TEMPLATE EXTENDS THIS, the same way it extends `ci`. The node_modules
-# prune in the find below is deliberate forward provision — it costs nothing here — but a repo that
-# actually grows an npm workspace should also DELETE those trees, which means adding its own sweep:
-#
-#     @find web -type d \( -name node_modules -o -name dist \) -prune -print -exec rm -rf {} +
-deepclean: ## Remove every generated tree: build output, test results, and the virtualenv
-	@# THE GUARD RUNS BEFORE ANYTHING IS DELETED, WHICH IS WHY `clean` IS INVOKED FROM THE RECIPE
-	@# RATHER THAN BEING A PREREQUISITE. As a prerequisite it ran FIRST — so a deepclean that
-	@# refused an out-of-range path had already removed $(VENV) by the time it refused, which is
-	@# the half-finished state the guard exists to prevent. A recipe line also keeps the ordering
-	@# under `make -j`, where prerequisite order is not guaranteed.
-	@case '$(ARTIFACTS_DIR)' in \
-		''|/*) echo 'make: refusing to delete ARTIFACTS_DIR=$(ARTIFACTS_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
-	esac
-	@$(MAKE) --no-print-directory clean
+clean-venv: ## Remove the local virtualenv (rebuild it with `make setup`)
+	$(PYTHON) eng/scripts/check_output_path.py "$(VENV)"
+	rm -rf -- "$(VENV)"
+
+deepclean: distclean ## Remove all generated output (compatibility alias)
+
+distclean: ## Remove build output, test results, history, and the local virtualenv
+	@$(PYTHON) eng/scripts/check_output_path.py "$(ARTIFACTS_DIR)" "$(VENV)"
+	rm -rf -- "$(VENV)"
 	-dotnet clean $(SOLUTION) --nologo --verbosity quiet
-	rm -rf $(ARTIFACTS_DIR)
+	rm -rf -- "$(ARTIFACTS_DIR)"
 	@# TestResults/ is where a bare `dotnet test` writes, which the Makefile does not use but
 	@# leaves available for IDEs and ad-hoc runs. Named explicitly rather than swept.
 	rm -rf TestResults
 	@find . \
 		\( -name node_modules -o -name '$(VENV)' -o -name .git -o -name .idea \) -prune -o \
 		-type d \( -name bin -o -name obj \) -prune -print -exec rm -rf {} +
-	@echo 'make: deep clean complete. Restore with `make setup`.'
+	@echo 'make: distclean complete. Restore with `make setup`.'
 
 # ---------------------------------------------------------------------------
 # GITHUB RULESETS (branch protection as code)
@@ -320,9 +300,7 @@ check-python: ## Verify the setup interpreter is new enough
 # state for current projects. The test runner prunes reports using the solution's
 # actual test modules and their report names.
 prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longer exist
-	@case '$(ARTIFACTS_DIR)' in \
-		''|/*) echo 'make: refusing to prune ARTIFACTS_DIR=$(ARTIFACTS_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
-	esac
+	@$(PYTHON) eng/scripts/check_output_path.py "$(ARTIFACTS_DIR)" $(foreach tree,bin obj publish,"$(ARTIFACTS_DIR)/$(tree)")
 	@current=$$(find . -name '*.csproj' -not -path './$(ARTIFACTS_DIR)/*' -not -path './$(VENV)/*' \
 		-exec basename {} .csproj \; 2> /dev/null | sort -u); \
 	[ -n "$$current" ] || { echo 'make: found no .csproj files; skipping prune.' 1>&2; exit 0; }; \
@@ -332,9 +310,19 @@ prune-stale-output: ## Remove $(ARTIFACTS_DIR) output for projects that no longe
 			[ -d "$$dir" ] || continue; \
 			name=$$(basename "$$dir"); \
 			printf '%s\n' "$$current" | grep -qxF "$$name" \
-				|| { echo "make: pruning stale output $$dir"; rm -rf "$$dir"; }; \
+				|| { echo "make: pruning stale output $$dir"; rm -rf -- "$$dir"; }; \
 		done; \
 	done
+
+make-contract-test: check-python ## Test cleanup boundaries and suite selection
+	$(PYTHON) -m unittest discover -s tests -p test_make_contract.py
+
+restore: check-dotnet ## Restore solution dependencies
+	dotnet restore "$(SOLUTION)"
+
+rebuild: ## Clean, then build the solution
+	$(MAKE) clean
+	$(MAKE) build
 
 build: check-dotnet prune-stale-output ## Build every project with analyzers enforced
 	dotnet build "$(SOLUTION)" --configuration $(CONFIGURATION)
@@ -396,6 +384,12 @@ TEST_CONFIG_DIR := $(shell printf '%s' '$(CONFIGURATION)' | tr '[:upper:]' '[:lo
 test: build check-python ## Run solution test projects, writing reports and coverage
 	$(PYTHON) eng/scripts/run_solution_tests.py "$(SOLUTION)" "$(CONFIGURATION)" \
 		"$(TEST_RESULTS_DIR)" "$(TEST_HISTORY_DIR)" "$(TEST_HISTORY_WINDOW_DAYS)"
+
+test-unit: build check-python ## Run solution tests under test/unit
+test-integration: build check-python ## Run solution tests under test/integration
+test-unit test-integration:
+	$(PYTHON) eng/scripts/run_solution_tests.py "$(SOLUTION)" "$(CONFIGURATION)" \
+		"$(TEST_RESULTS_DIR)/$@" "$(TEST_HISTORY_DIR)/$@" "$(TEST_HISTORY_WINDOW_DAYS)" --suite $(@:test-%=%)
 
 # ---------------------------------------------------------------------------
 # COVERAGE
@@ -469,7 +463,9 @@ PACKAGE_DIR ?= $(ARTIFACTS_DIR)/package/$(TEST_CONFIG_DIR)
 # Packaging metadata and the readme that ships with the package live in Directory.Build.props and
 # Directory.Build.targets. Test projects set IsPackable=false themselves, so nothing here has to
 # exclude them.
-pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
+pack: package ## Produce NuGet packages (compatibility alias)
+
+package: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 	@# Emptied first so $(PACKAGE_DIR) holds exactly what THIS run produced. Without it the
 	@# directory accumulates every version ever packed locally, and the consumers of that
 	@# directory may be consumed by globs, so a stale package could otherwise be mistaken
@@ -480,10 +476,8 @@ pack: build ## Produce the NuGet packages into $(PACKAGE_DIR)
 	@# Release package. The guard refuses an empty or absolute path: $(PACKAGE_DIR) is composed
 	@# from $(ARTIFACTS_DIR) and $(CONFIGURATION), and an `rm -rf` built from overridable
 	@# variables should not be able to point at /.
-	@case '$(PACKAGE_DIR)' in \
-		''|/*) echo 'make: refusing to clean PACKAGE_DIR=$(PACKAGE_DIR) — must be a non-empty relative path.' 1>&2; exit 1 ;; \
-	esac
-	@rm -rf "$(PACKAGE_DIR)"
+	@$(PYTHON) eng/scripts/check_output_path.py "$(PACKAGE_DIR)"
+	@rm -rf -- "$(PACKAGE_DIR)"
 	@# Recreated empty rather than left absent, because `sbom` uses $(PACKAGE_DIR) as its build
 	@# drop and sbom-tool fails outright on a missing -b path. A repository where nothing is
 	@# packable — an application rather than a library — never has `dotnet pack` create it, so
@@ -543,7 +537,7 @@ sbom: tools ## Generate an SPDX 2.2 SBOM for an existing, explicitly scoped deli
 		-pm true
 	@echo "make: wrote $$SBOM_DIR/_manifest/spdx_2.2/manifest.spdx.json"
 
-example-sbom: pack tools ## Build and inventory the example NuGet packages
+example-sbom: package tools ## Build and inventory the example NuGet packages
 	@version=$$(dotnet tool run nbgv get-version -v NuGetPackageVersion) && \
 		$(MAKE) sbom SBOM_BUILD_DROP="$(PACKAGE_DIR)" \
 		SBOM_COMPONENT_PATH="$(ARTIFACTS_DIR)/obj/library.example" \

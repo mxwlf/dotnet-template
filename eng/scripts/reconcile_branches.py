@@ -66,7 +66,7 @@ def check_initial_history(remote):
         raise ReconciliationError(
             f'Additional commits or unexpected history found:\n  {details}\n'
             'Automatic reconciliation requires the original template commits. '
-            'Keep your work and reconcile the branches manually before retrying setup.'
+            'Keep your work and reconcile the branches manually before retrying make init.'
         )
 
 

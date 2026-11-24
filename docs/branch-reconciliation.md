@@ -6,12 +6,12 @@ commit. Those initial commits have no common ancestor, so GitHub cannot compare
 them in a pull request. The template's default branch is `develop`. If you only
 need `develop` and `main`, leave **Include all branches** unchecked. [GitHub's template documentation](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template)
 
-## Run setup before making commits
+## Initialize the repository before making commits
 
-Clone the generated repository and run `make setup` from its root. Setup runs
-`make reconcile-branches` first. After reconciliation succeeds, setup creates or
+Clone the generated repository and run `make init` from its root. Initialization runs
+`make reconcile-branches` first. After reconciliation succeeds, `make setup` creates or
 refreshes `.venv`, configures Git to use the committed hooks, and installs the
-hook environments. A reconciliation error stops setup before those local steps.
+hook environments. A reconciliation error stops initialization before those local steps.
 
 Run `make reconcile-branches` to repeat just the branch step. The target calls
 [`eng/scripts/reconcile_branches.py`](../eng/scripts/reconcile_branches.py), which you
@@ -23,7 +23,7 @@ python3 eng/scripts/reconcile_branches.py
 
 The script uses Git and the credentials for `origin`. A repository with an
 `origin` needs network access for the fetch if that remote is hosted. A push
-requires permission to create the missing branch or update `main`. Run setup
+requires permission to create the missing branch or update `main`. Run initialization
 before applying branch rules that would block the push.
 
 ## What changes on `origin`
@@ -42,7 +42,7 @@ clone. It uses the actual remote branches to decide what to do.
 
 Other branches copied by GitHub keep their original histories. If you want to
 keep a reference to the copied `main` snapshot, fetch and save its initial
-commit before running setup.
+commit before running initialization.
 
 ```sh
 git fetch origin main
@@ -56,10 +56,10 @@ branch still points to a root commit. It compares every local branch tip and
 the current checkout, including a detached `HEAD`, with those fetched tips.
 If it finds extra commits, the error names the affected refs and commit IDs.
 Keep those commits and reconcile the branches manually. After both branches
-share history, `make setup` can continue through its usual local steps.
+share history, `make init` can continue through its usual local steps.
 
 The script checks Git history. An amended or replaced root commit still looks
-like an initial commit, so run setup before amending any generated commits.
+like an initial commit, so run initialization before amending any generated commits.
 For a shallow clone, run `git fetch --unshallow origin` and retry.
 
 The push uses an explicit Git lease. A new branch must still be absent, and an
@@ -86,7 +86,7 @@ Use an unused backup name. If you cloned with `--single-branch` and `main` was
 outside the fetch configuration, run `git remote set-branches --add origin main`
 and `git fetch origin` before switching.
 
-## Verify the setup workflow
+## Verify the initialization workflow
 
 `make branch-reconciliation-test` exercises both creation cases, unrelated
 history, repeat runs, and preflight failures against temporary local Git

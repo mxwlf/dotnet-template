@@ -20,7 +20,7 @@ workflow they impose — how a change reaches `develop` — see
 ## What the shipped rulesets enforce
 
 The integration branch is `develop`; `main` is intended to record the promoted
-source commit. Run [`make setup`](../../docs/branch-reconciliation.md) before
+source commit. Run [`make init`](../../docs/branch-reconciliation.md) before
 applying branch protection. Both rulesets block deletion and force pushes, require a PR, one approval, resolved
 review threads, an up-to-date branch and the `ci` check. They permit merge
 commits and allow a repository admin to bypass the rules within a PR. That
