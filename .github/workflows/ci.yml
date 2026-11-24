@@ -125,7 +125,7 @@ jobs:
       #
       # always(), for the same reason the history cache below is saved unconditionally: the run whose
       # reports someone wants to download is the red one. if-no-files-found stays at a warning because
-      # `make ci` legitimately produces nothing here when it stops in `lint`, before any test runs.
+      # `make ci` legitimately produces nothing here when it stops in `pre-commit`, before any test runs.
       #
       # No permissions block is needed: the artifact API is reached with the runner's own artifact
       # token, not the GITHUB_TOKEN scoped at the top of this file. The Html report inside the zip is
@@ -146,7 +146,7 @@ jobs:
       # always(), because a red run is the one whose outcome most needs recording: without it the
       # history would be a record of green runs only, and no failure would ever look repeated.
       # continue-on-error, because the snapshot is a nicety in a job summary and must never be the
-      # thing that fails a build — it is legitimately absent when `make ci` stopped in `lint`, before
+      # thing that fails a build — it is legitimately absent when `make ci` stopped in `pre-commit`, before
       # any test ran.
       - uses: actions/cache/save@v6.1.0
         if: always()
