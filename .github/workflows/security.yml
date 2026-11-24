@@ -21,7 +21,7 @@ jobs:
         run: |
           advisories="$(python3 eng/scripts/security_exceptions.py)"
           echo "advisories=$advisories" >> "$GITHUB_OUTPUT"
-      - uses: actions/dependency-review-action@v5.0.0
+      - uses: actions/dependency-review-action@v5.0.1
         with:
           fail-on-severity: high
           allow-ghsas: ${{ steps.exceptions.outputs.advisories }}
