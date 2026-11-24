@@ -273,10 +273,10 @@ distclean: ## Remove build output, test results, history, and the local virtuale
 # Requires the GitHub CLI (`gh`), authenticated — unlike the targets above, this
 # is not covered by `make setup`. Target another repo with REPO=owner/name.
 
-rulesets-apply: ## Create/update this repo's GitHub rulesets from .github/rulesets/
+rulesets-apply: ## Create/update this repo's GitHub rulesets from .github/rulesets/ and enable branch auto-delete
 	$(RULESETS) apply
 
-rulesets-diff: ## Report drift between .github/rulesets/ and the live rulesets
+rulesets-diff: ## Report drift between .github/rulesets/ and the live rulesets and branch auto-delete
 	$(RULESETS) diff
 
 rulesets-export: ## Overwrite .github/rulesets/ with the live rulesets
