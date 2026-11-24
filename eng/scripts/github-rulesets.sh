@@ -6,9 +6,19 @@
 # JSON in .github/rulesets/, and rebuilds it on any repo with the GitHub CLI.
 #
 #   export  overwrite .github/rulesets/ with the repo's live rulesets
-#   apply   create/update the repo's rulesets from .github/rulesets/
-#   diff    report drift between the committed files and the live rulesets
+#   apply   create/update the repo's rulesets from .github/rulesets/, and turn
+#           on the repo's delete_branch_on_merge setting
+#   diff    report drift between the committed files and the live rulesets,
+#           and between delete_branch_on_merge and true
 #           (exits non-zero when they differ)
+#
+# WHY APPLY ALSO OWNS delete_branch_on_merge: a merged head branch that is left
+# behind still accepts pull requests, and one merged into it lands nowhere;
+# GitHub only moves a stacked PR onto the next base when its own base is
+# deleted. It is a repository setting, not a ruleset, so it has no file here.
+# Auto-delete never removes the default branch, and the rulesets' `deletion`
+# rule keeps main and develop. Both are skipped when RULESET limits the run to
+# one ruleset.
 #
 # WHY NOT `gh ruleset`: that command group is read-only (check/list/view). All
 # writes go through `gh api` against /repos/{owner}/{repo}/rulesets.
@@ -180,6 +190,9 @@ cmd_apply() {
 			printf 'created %s\n' "$name"
 		fi
 	done < "$TMP/files"
+	[ -z "${RULESET:-}" ] || return 0
+	gh api --method PATCH "repos/$repo" -F delete_branch_on_merge=true > /dev/null
+	printf 'updated delete_branch_on_merge (true)\n'
 }
 
 cmd_diff() {
@@ -208,6 +221,15 @@ cmd_diff() {
 			drift=1
 		fi
 	done < "$TMP/files"
+	if [ -z "${RULESET:-}" ]; then
+		live="$(gh api "repos/$repo" --jq .delete_branch_on_merge)"
+		if [ "$live" = true ]; then
+			printf 'in sync: delete_branch_on_merge\n'
+		else
+			printf 'DRIFT: delete_branch_on_merge is %s on %s, want true (export does not pull it back; apply sets it)\n' "$live" "$repo"
+			drift=1
+		fi
+	fi
 	[ "$drift" -eq 0 ] \
 		|| die "committed rulesets do not match $repo. Reconcile with: make rulesets-apply (push the repo's version) or make rulesets-export (pull GitHub's)."
 }

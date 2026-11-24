@@ -58,9 +58,23 @@ Pull Requests**, or:
 gh api --method PATCH repos/OWNER/REPO -F allow_merge_commit=true
 ```
 
-This is the one part of the gate that `make rulesets-apply` cannot reproduce for
-you, because it lives on the repository rather than in a ruleset. It surfaced in
-`dotnet-template`, where the first merge under this policy failed on exactly that.
+This setting lives on the repository rather than in a ruleset, and
+`make rulesets-apply` leaves it alone: the only repository setting it manages is
+`delete_branch_on_merge` (below). The gap surfaced in `dotnet-template`, where
+the first merge under this policy failed on exactly that.
+
+## Merged head branches are deleted
+
+`make rulesets-apply` also turns on the repository's `delete_branch_on_merge`,
+and `make rulesets-diff` reports drift when it is off. A merged branch that stays
+on GitHub still accepts pull requests, so a stacked pull request can merge into
+it and never reach `develop`. GitHub moves a stacked pull request onto the next
+base only when the branch under it is deleted.
+
+Auto-delete never removes the default branch, and the `deletion` rule in both
+rulesets protects `main` and `develop` anyway. `make rulesets-export` does not
+pull the setting back: if someone switches it off in the UI, `diff` reports it
+and `apply` turns it on again. Runs limited with `RULESET=` skip it.
 
 ## The required check must actually run
 
